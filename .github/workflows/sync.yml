@@ -26,13 +26,88 @@ jobs:
           find . -name "playimdb*.js" -delete
           echo "Deleted playimdb files"
 
-      - name: Remove PlayIMDb from manifest and add DG0011 suffix
+      - name: Restore Cinezo provider
+        run: |
+          cat > providers/cinezo.js << 'ENDOFFILE'
+          // Cinezo Provider for Nuvio
+          var BASE_URL = 'https://api.cinezo.net/media';
+
+          function getStreams(tmdbId, mediaType, season, episode) {
+            var url;
+            if (mediaType === 'movie') {
+              url = BASE_URL + '/tmdb-movie-' + tmdbId;
+            } else {
+              url = BASE_URL + '/tmdb-tv-' + tmdbId + '/' + season + '/' + episode;
+            }
+            console.log('[Cinezo] Fetching: ' + url);
+            return fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://cinezo.net/',
+                'Origin': 'https://cinezo.net'
+              }
+            })
+              .then(function(response) {
+                if (!response.ok) { throw new Error('[Cinezo] HTTP error: ' + response.status); }
+                return response.text();
+              })
+              .then(function(html) {
+                var streams = [];
+                var m3u8Regex = /https?:\/\/[^\s"']+\.m3u8[^\s"']*/g;
+                var m3u8Matches = html.match(m3u8Regex);
+                if (m3u8Matches) {
+                  m3u8Matches.forEach(function(streamUrl, index) {
+                    streamUrl = streamUrl.replace(/\\/g, '').replace(/"/g, '');
+                    streams.push({ name: 'Cinezo', title: 'Cinezo Stream #' + (index + 1), url: streamUrl, quality: 'Auto', headers: { 'Referer': 'https://cinezo.net/', 'Origin': 'https://cinezo.net' } });
+                  });
+                }
+                var mp4Regex = /https?:\/\/[^\s"']+\.mp4[^\s"']*/g;
+                var mp4Matches = html.match(mp4Regex);
+                if (mp4Matches) {
+                  mp4Matches.forEach(function(streamUrl, index) {
+                    streamUrl = streamUrl.replace(/\\/g, '').replace(/"/g, '');
+                    streams.push({ name: 'Cinezo', title: 'Cinezo MP4 #' + (index + 1), url: streamUrl, quality: '1080p', headers: { 'Referer': 'https://cinezo.net/', 'Origin': 'https://cinezo.net' } });
+                  });
+                }
+                var sourceRegex = /"file"\s*:\s*"(https?:\/\/[^"]+)"/g;
+                var sourceMatch;
+                while ((sourceMatch = sourceRegex.exec(html)) !== null) {
+                  var sourceUrl = sourceMatch[1].replace(/\\/g, '');
+                  var isDuplicate = streams.some(function(s) { return s.url === sourceUrl; });
+                  if (!isDuplicate) { streams.push({ name: 'Cinezo', title: 'Cinezo Source', url: sourceUrl, quality: 'Auto', headers: { 'Referer': 'https://cinezo.net/', 'Origin': 'https://cinezo.net' } }); }
+                }
+                console.log('[Cinezo] Found ' + streams.length + ' stream(s)');
+                return streams;
+              })
+              .catch(function(error) { console.error('[Cinezo] Error: ' + error.message); return []; });
+          }
+
+          if (typeof module !== 'undefined' && module.exports) { module.exports = { getStreams }; } else { global.getStreams = getStreams; }
+          ENDOFFILE
+
+      - name: Remove PlayIMDb from manifest, add Cinezo, add DG0011 suffix
         run: |
           node -e "
             const fs = require('fs');
             let manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
             manifest.name = 'D3adlyRocket [DG0011]';
             manifest.scrapers = manifest.scrapers.filter(s => !s.id.startsWith('playimdb'));
+            const alreadyAdded = manifest.scrapers.some(s => s.id === 'cinezo');
+            if (!alreadyAdded) {
+              manifest.scrapers.push({
+                id: 'cinezo',
+                name: 'Cinezo',
+                description: '4K streaming via Cinezo - Movies and TV Shows with multiple servers and subtitles',
+                version: '1.0.0',
+                author: 'DG0011',
+                supportedTypes: ['movie', 'tv'],
+                filename: 'providers/cinezo.js',
+                enabled: true,
+                formats: ['mp4', 'm3u8'],
+                logo: 'https://cinezo.net/favicon.ico',
+                contentLanguage: ['en']
+              });
+            }
             fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
           "
 
@@ -41,5 +116,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --staged --quiet || git commit -m "Auto-sync: removed playimdb scrapers, added DG0011 tag"
+          git diff --staged --quiet || git commit -m "Auto-sync: removed playimdb, restored cinezo, tagged DG0011"
           git push
