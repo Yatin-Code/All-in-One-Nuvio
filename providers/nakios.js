@@ -1,8 +1,8 @@
 // =============================================================
 // Provider Nuvio : Nakios (VF / VOSTFR / MULTI)
-// Version : 3.9.1
+// Version : 3.9.2
 // - Bold Top Line: Nakios - Quality
-// - Sub-description: English Movie Title + Icons
+// - Sub-description: S[X] E[X] | English Movie Title + Icons
 // =============================================================
 
 var TMDB_KEY = 'f3d757824f08ea2cff45eb8f47ca3a1e';
@@ -84,7 +84,7 @@ function resolveSource(source, endpoint) {
 
 // ─── UI / Formatting ─────────────────────────────────────────
 
-function normalizeSources(sources, endpoint, movieName) {
+function normalizeSources(sources, endpoint, movieName, season, episode) {
   var results = [];
   for (var i = 0; i < sources.length; i++) {
     var s = sources[i];
@@ -112,21 +112,20 @@ function normalizeSources(sources, endpoint, movieName) {
         langLabel = 'VOSTFR';
     }
 
+    // --- S1 E1 Logic ---
+    // If season and episode are provided (TV show), add them to the front
+    var seInfo = (season && episode) ? 'S' + season + ' E' + episode + ' | ' : '';
+
     // --- Title Construction ---
-    // The "displayTitle" is the one that shows the Movie Name in the sub-line
-    var displayTitle = '🎬 ' + movieName + 
+    var displayTitle = '🎬 ' + seInfo + movieName + 
                        ' | 📺 ' + quality + 
                        ' | ' + langIcon + ' ' + langLabel + 
                        ' | 🎞️ ' + format + 
                        size;
 
     results.push({
-      // THIS KEEPS THE TOP LINE BOLD AS "Nakios - 1080p"
       name: 'Nakios - ' + quality, 
-      
-      // THIS SHOWS THE ENGLISH MOVIE NAME IN THE DESCRIPTION
       title: displayTitle,
-      
       url:     resolved.url,
       quality: quality,
       format:  resolved.format,
@@ -143,7 +142,6 @@ function normalizeSources(sources, endpoint, movieName) {
 // ─── Entry Point ─────────────────────────────────────────────
 
 function getStreams(tmdbId, mediaType, season, episode) {
-  // We fetch the title here first so it's ready for the list below
   return getEnglishTitle(tmdbId, mediaType).then(function(movieName) {
     return detectEndpoint().then(function(endpoint) {
       var url = mediaType === 'tv'
@@ -156,7 +154,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (!data.success || !data.sources) return [];
-        return normalizeSources(data.sources, endpoint, movieName);
+        // Pass season and episode only if it's a TV show
+        var sNum = mediaType === 'tv' ? season : null;
+        var eNum = mediaType === 'tv' ? episode : null;
+        return normalizeSources(data.sources, endpoint, movieName, sNum, eNum);
       });
     });
   }).catch(function() { return []; });
