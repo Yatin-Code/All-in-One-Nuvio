@@ -1,8 +1,8 @@
 // =============================================================
 // Provider Nuvio : Nakios (VF / VOSTFR / MULTI)
-// Version : 3.9.1
+// Version : 4.0.0
 // - Bold Top Line: Nakios - Quality
-// - Sub-description: English Movie Title + Icons
+// - Sub-description: S[X] E[X] - Episode Name | Movie Name | Icons
 // =============================================================
 
 var TMDB_KEY = 'f3d757824f08ea2cff45eb8f47ca3a1e';
@@ -12,7 +12,7 @@ var NAKIOS_FALLBACK = 'fit';
 
 var _cachedEndpoint = null;
 
-// ─── TMDB Helper: Get English Movie Name ─────────────────────
+// ─── TMDB Helpers ───────────────────────────────────────────
 
 function getEnglishTitle(tmdbId, type) {
   var url = 'https://api.themoviedb.org/3/' + (type === 'tv' ? 'tv' : 'movie') + '/' + tmdbId + '?api_key=' + TMDB_KEY + '&language=en-US';
@@ -22,6 +22,18 @@ function getEnglishTitle(tmdbId, type) {
       return data.title || data.name || "Nakios";
     })
     .catch(function() { return "Nakios"; });
+}
+
+// NEW: Fetch the specific episode name
+function getEpisodeName(tmdbId, season, episode) {
+  if (!tmdbId || !season || !episode) return Promise.resolve(null);
+  var url = 'https://api.themoviedb.org/3/tv/' + tmdbId + '/season/' + season + '/episode/' + episode + '?api_key=' + TMDB_KEY + '&language=en-US';
+  return fetch(url)
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      return data.name || null;
+    })
+    .catch(function() { return null; });
 }
 
 // ─── Construction de l'endpoint ──────────────────────────────
@@ -84,7 +96,7 @@ function resolveSource(source, endpoint) {
 
 // ─── UI / Formatting ─────────────────────────────────────────
 
-function normalizeSources(sources, endpoint, movieName) {
+function normalizeSources(sources, endpoint, movieName, season, episode, epName) {
   var results = [];
   for (var i = 0; i < sources.length; i++) {
     var s = sources[i];
@@ -93,17 +105,14 @@ function normalizeSources(sources, endpoint, movieName) {
     var resolved = resolveSource(s, endpoint);
     if (!resolved) continue;
 
-    // --- Metadata Preparation ---
     var quality = s.quality || 'HD';
     var rawLang = (s.lang || 'MULTI').toUpperCase();
     var size    = s.size ? ' | 💾 ' + s.size : '';
     var format  = resolved.format.toUpperCase();
     
-    // Language Icons Priority Logic
     var langIcon = '🇫🇷'; 
     var langLabel = 'VF';
 
-    // MULTI Priority check
     if (rawLang.indexOf('MULTI') !== -1 || (s.name && s.name.toUpperCase().indexOf('MULTI') !== -1)) {
         langIcon = '🌍';
         langLabel = 'MULTI';
@@ -112,21 +121,25 @@ function normalizeSources(sources, endpoint, movieName) {
         langLabel = 'VOSTFR';
     }
 
-    // --- Title Construction ---
-    // The "displayTitle" is the one that shows the Movie Name in the sub-line
-    var displayTitle = '🎬 ' + movieName + 
+    // --- S1 E1 - Episode Name Logic ---
+    var seInfo = "";
+    if (season && episode) {
+        seInfo = 'S' + season + ' E' + episode;
+        if (epName) {
+            seInfo += ' - ' + epName; // Adds " - Winter is Coming"
+        }
+        seInfo += ' | ';
+    }
+
+    var displayTitle = '🎬 ' + seInfo + movieName + 
                        ' | 📺 ' + quality + 
                        ' | ' + langIcon + ' ' + langLabel + 
                        ' | 🎞️ ' + format + 
                        size;
 
     results.push({
-      // THIS KEEPS THE TOP LINE BOLD AS "Nakios - 1080p"
       name: 'Nakios - ' + quality, 
-      
-      // THIS SHOWS THE ENGLISH MOVIE NAME IN THE DESCRIPTION
       title: displayTitle,
-      
       url:     resolved.url,
       quality: quality,
       format:  resolved.format,
@@ -143,8 +156,14 @@ function normalizeSources(sources, endpoint, movieName) {
 // ─── Entry Point ─────────────────────────────────────────────
 
 function getStreams(tmdbId, mediaType, season, episode) {
-  // We fetch the title here first so it's ready for the list below
-  return getEnglishTitle(tmdbId, mediaType).then(function(movieName) {
+  // Fetch English Title AND Episode Name simultaneously
+  return Promise.all([
+    getEnglishTitle(tmdbId, mediaType),
+    mediaType === 'tv' ? getEpisodeName(tmdbId, season, episode) : Promise.resolve(null)
+  ]).then(function(meta) {
+    var movieName = meta[0];
+    var epName = meta[1];
+
     return detectEndpoint().then(function(endpoint) {
       var url = mediaType === 'tv'
         ? endpoint.api + '/sources/tv/' + tmdbId + '/' + (season || 1) + '/' + (episode || 1)
@@ -156,7 +175,11 @@ function getStreams(tmdbId, mediaType, season, episode) {
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (!data.success || !data.sources) return [];
-        return normalizeSources(data.sources, endpoint, movieName);
+        
+        var sNum = mediaType === 'tv' ? season : null;
+        var eNum = mediaType === 'tv' ? episode : null;
+        
+        return normalizeSources(data.sources, endpoint, movieName, sNum, eNum, epName);
       });
     });
   }).catch(function() { return []; });
