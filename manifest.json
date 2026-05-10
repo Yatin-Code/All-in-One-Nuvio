@@ -603,6 +603,19 @@
       "contentLanguage": ["en", "Ita"]
     },
     {
+      "id": "vixsync",
+      "name": "VixSync",
+      "description": "VixSync - The best place to watch movies and TV shows online for free. Stream in 1080p HD",
+      "version": "1.0.0",
+      "author": "Dustincos",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/vixsync.js",
+      "enabled": true,
+      "formats": ["mp4", "m3u8"],
+      "logo": "https://i.postimg.cc/Z5F3ndTL/vidsync.png",
+      "contentLanguage": ["en"]
+    },
+    {
       "id": "onlykdrama",
       "name": "OnlyKDrama",
       "description": "Asian Drama",
