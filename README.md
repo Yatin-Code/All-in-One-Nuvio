@@ -84,6 +84,7 @@ A masive shoutout to all the developers who have created these plugins.
 - **KennethJYS**
 - **Real-Morpheus**
 - **Xyr0nX/Antonio**
+- **Yatin-Code**
 
 ---
 
