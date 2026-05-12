@@ -1,7 +1,7 @@
 "use strict";
 
 // src/uhdmovies/index.js
-var DOMAIN = "https://uhdmovies.rip";
+var DOMAIN = "https://uhdmovies.pink";
 var TMDB_API = "https://api.themoviedb.org/3";
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -291,57 +291,48 @@ function bypassHrefli(url) {
     return null;
   });
 }
-function extractVideoSeed(finallink) {
-  console.log("[UHDMovies] VideoSeed: " + finallink);
-  var hostM = finallink.match(/^https?:\/\/([^\/]+)/);
-  var host = hostM ? hostM[1] : "video-seed.xyz";
-  var tokenParts = finallink.split("?url=");
-  if (tokenParts.length < 2) return Promise.resolve(null);
-  var token = tokenParts[1];
-  return fetch("https://" + host + "/api", {
-    method: "POST",
-    headers: {
-      "User-Agent": USER_AGENT,
-      "Content-Type": "application/x-www-form-urlencoded",
-      "x-token": host,
-      "Referer": finallink
-    },
-    body: "keys=" + encodeURIComponent(token)
+
+function followRedirectForUrl(link) {
+  console.log("[UHDMovies] FollowRedirect: " + link);
+  // If the link already has ?url= with a real http download URL, extract it directly
+  var existingUrl = link.match(/[?&]url=(https?[^&\s]+)/);
+  if (existingUrl) {
+    var decoded = decodeURIComponent(existingUrl[1]);
+    console.log("[UHDMovies] Direct URL param: " + decoded.substring(0, 80));
+    return Promise.resolve(decoded);
+  }
+  // Otherwise follow the redirect chain
+  return fetch(link, {
+    headers: { "User-Agent": USER_AGENT },
+    redirect: "follow"
   }).then(function(res) {
-    return res.text();
-  }).then(function(text) {
-    var m = text.match(/url":"([^"]+)"/);
-    return m ? m[1].replace(/\\\//g, "/") : null;
+    var finalUrl = res.url || "";
+    console.log("[UHDMovies] Final URL (" + finalUrl.length + " chars): " + finalUrl.substring(0, 60) + "...");
+    var urlParam = finalUrl.match(/[?&]url=(https?[^&\s]+)/);
+    if (urlParam) {
+      return decodeURIComponent(urlParam[1]);
+    }
+    
+    return res.text().then(function(html) {
+      
+      var metaUrl = html.match(/[?&]url=(https?:\/\/[^"&\s]+)/);
+      if (metaUrl) return decodeURIComponent(metaUrl[1]);
+     
+      var dlBtn = html.match(/<a[^>]*href="(https?:\/\/video-downloads\.googleusercontent\.com[^"]+)"/i)
+                || html.match(/<a[^>]*href="(https?:\/\/[^"]+\.googleusercontent\.com[^"]+)"/i);
+      if (dlBtn) return dlBtn[1];
+      return null;
+    });
   }).catch(function(err) {
-    console.error("[UHDMovies] VideoSeed error: " + err.message);
+    console.error("[UHDMovies] FollowRedirect error: " + err.message);
     return null;
   });
 }
+function extractVideoSeed(finallink) {
+  return followRedirectForUrl(finallink);
+}
 function extractInstantLink(finallink) {
-  console.log("[UHDMovies] InstantLink: " + finallink);
-  var hostM = finallink.match(/^https?:\/\/([^\/]+)/);
-  var host = hostM ? hostM[1] : finallink.indexOf("video-leech") !== -1 ? "video-leech.pro" : "video-seed.pro";
-  var tokenParts = finallink.split("url=");
-  if (tokenParts.length < 2) return Promise.resolve(null);
-  var token = tokenParts[1];
-  return fetch("https://" + host + "/api", {
-    method: "POST",
-    headers: {
-      "User-Agent": USER_AGENT,
-      "Content-Type": "application/x-www-form-urlencoded",
-      "x-token": host,
-      "Referer": finallink
-    },
-    body: "keys=" + encodeURIComponent(token)
-  }).then(function(res) {
-    return res.text();
-  }).then(function(text) {
-    var m = text.match(/url":"([^"]+)"/);
-    return m ? m[1].replace(/\\\//g, "/") : null;
-  }).catch(function(err) {
-    console.error("[UHDMovies] InstantLink error: " + err.message);
-    return null;
-  });
+  return followRedirectForUrl(finallink);
 }
 function extractResumeBot(url) {
   console.log("[UHDMovies] ResumeBot: " + url);
@@ -428,33 +419,32 @@ function extractDriveseedPage(url) {
       var href = item.href;
       if (!href) return;
       if (text.indexOf("instant download") !== -1) {
+        // Instant Download links from cdn.video-gen.xyz redirect to
+        // video-seed.pro/?url=ACTUAL_DOWNLOAD where the real URL is in the param
         promises.push(
           extractInstantLink(href).then(function(link) {
-            if (link) streams.push({ name: "UHDMovies", title: "Driveseed Instant " + labelExtras, url: link, quality });
+            if (link) streams.push({ name: "UHDMovies", title: "UHDMovies Instant " + quality + " " + labelExtras, url: link, quality: quality });
           })
         );
       } else if (text.indexOf("resume worker bot") !== -1) {
         promises.push(
           extractResumeBot(href).then(function(link) {
-            if (link) streams.push({ name: "UHDMovies", title: "Driveseed ResumeBot " + labelExtras, url: link, quality });
+            if (link) streams.push({ name: "UHDMovies", title: "UHDMovies ResumeBot " + quality + " " + labelExtras, url: link, quality: quality });
           })
         );
       } else if (text.indexOf("direct links") !== -1) {
         promises.push(
           extractCFType1(baseDomain + href).then(function(links) {
             links.forEach(function(link) {
-              streams.push({ name: "UHDMovies", title: "Driveseed Direct " + labelExtras, url: link, quality });
+              streams.push({ name: "UHDMovies", title: "UHDMovies Direct " + quality + " " + labelExtras, url: link, quality: quality });
             });
           })
         );
       } else if (text.indexOf("resume cloud") !== -1) {
-        promises.push(
-          extractResumeCloudLink(baseDomain, href).then(function(link) {
-            if (link) streams.push({ name: "UHDMovies", title: "Driveseed ResumeCloud " + labelExtras, url: link, quality });
-          })
-        );
+        // Resume Cloud requires CF challenge token, skip for now
+        console.log("[UHDMovies] Skipping Resume Cloud (requires CF token)");
       } else if (text.indexOf("cloud download") !== -1) {
-        streams.push({ name: "UHDMovies", title: "Driveseed Cloud " + labelExtras, url: href, quality });
+        streams.push({ name: "UHDMovies", title: "UHDMovies Cloud " + quality + " " + labelExtras, url: href, quality: quality });
       }
     });
     return Promise.all(promises).then(function() {
