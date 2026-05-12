@@ -35,7 +35,7 @@
       "version": "2.0.0",
       "author": "Xyr0nX",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/4khdhubtest.js",
+      "filename": "providers/4khdhubnew.js",
       "enabled": true,
       "formats": ["mp4", "m3u8"],
       "logo": "https://i.postimg.cc/DZpW6Xfb/4khdhub.png",
