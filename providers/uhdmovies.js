@@ -1,6 +1,6 @@
 "use strict";
 
-// src/uhdmovies/index.js
+
 var DOMAIN = "https://uhdmovies.pink";
 var TMDB_API = "https://api.themoviedb.org/3";
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
@@ -105,10 +105,10 @@ function extractThirdListItem(html) {
 }
 function getIndexQuality(str) {
   if (!str) return "Unknown";
-  // Check explicit resolution first (e.g. 2160p, 1080p, 720p)
+
   var m = str.match(/(\d{3,4})[pP]/);
   if (m) return m[1] + "p";
-  // Only treat 4K/UHD as 2160p when it's a standalone quality tag, not part of site names like "UHDMovies"
+
   if (/\b4[kK]\b/.test(str) || /\bUHD\b(?!movies)/i.test(str)) return "2160p";
   return "Unknown";
 }
@@ -294,14 +294,14 @@ function bypassHrefli(url) {
 
 function followRedirectForUrl(link) {
   console.log("[UHDMovies] FollowRedirect: " + link);
-  // If the link already has ?url= with a real http download URL, extract it directly
+
   var existingUrl = link.match(/[?&]url=(https?[^&\s]+)/);
   if (existingUrl) {
     var decoded = decodeURIComponent(existingUrl[1]);
     console.log("[UHDMovies] Direct URL param: " + decoded.substring(0, 80));
     return Promise.resolve(decoded);
   }
-  // Otherwise follow the redirect chain
+
   return fetch(link, {
     headers: { "User-Agent": USER_AGENT },
     redirect: "follow"
@@ -328,11 +328,20 @@ function followRedirectForUrl(link) {
     return null;
   });
 }
+var CLOUDFLARE_PROXY = "https://nuvio-proxy-worker.yatinstudyies.workers.dev/?url=";
+
+function wrapWithProxy(url) {
+  if (url && url.includes("googleusercontent.com")) {
+    return CLOUDFLARE_PROXY + encodeURIComponent(url);
+  }
+  return url;
+}
+
 function extractVideoSeed(finallink) {
-  return followRedirectForUrl(finallink);
+  return followRedirectForUrl(finallink).then(wrapWithProxy);
 }
 function extractInstantLink(finallink) {
-  return followRedirectForUrl(finallink);
+  return followRedirectForUrl(finallink).then(wrapWithProxy);
 }
 function extractResumeBot(url) {
   console.log("[UHDMovies] ResumeBot: " + url);
@@ -419,8 +428,7 @@ function extractDriveseedPage(url) {
       var href = item.href;
       if (!href) return;
       if (text.indexOf("instant download") !== -1) {
-        // Instant Download links from cdn.video-gen.xyz redirect to
-        // video-seed.pro/?url=ACTUAL_DOWNLOAD where the real URL is in the param
+
         promises.push(
           extractInstantLink(href).then(function(link) {
             if (link) streams.push({ name: "UHDMovies", title: "UHDMovies Instant " + quality + " " + labelExtras, url: link, quality: quality });
@@ -441,7 +449,7 @@ function extractDriveseedPage(url) {
           })
         );
       } else if (text.indexOf("resume cloud") !== -1) {
-        // Resume Cloud requires CF challenge token, skip for now
+
         console.log("[UHDMovies] Skipping Resume Cloud (requires CF token)");
       } else if (text.indexOf("cloud download") !== -1) {
         streams.push({ name: "UHDMovies", title: "UHDMovies Cloud " + quality + " " + labelExtras, url: href, quality: quality });
