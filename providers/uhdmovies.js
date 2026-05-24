@@ -174,6 +174,14 @@ function fetchText(url, extraHeaders) {
     return res.text();
   });
 }
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise(function(_, reject) {
+      setTimeout(function() { reject(new Error("Timeout after " + ms + "ms")); }, ms);
+    })
+  ]);
+}
 function fetchJson(url) {
   return fetch(url, { headers: { "User-Agent": USER_AGENT } }).then(function(res) {
     return res.json();
@@ -201,11 +209,21 @@ function getTmdbDetails(tmdbId, mediaType) {
   });
 }
 function searchByTitle(title, year) {
-  var query = encodeURIComponent((title + " " + (year || "")).trim());
+  var query = encodeURIComponent(title.trim()).replace(/%20/g, "+");
   var url = DOMAIN + "/?s=" + query;
   console.log("[UHDMovies] Search: " + url);
   return fetchText(url).then(function(html) {
-    return parseSearchResults(html);
+    var results = parseSearchResults(html);
+    if (results.length > 0) return results;
+    if (year) {
+      var queryWithYear = encodeURIComponent((title + " " + year).trim()).replace(/%20/g, "+");
+      var url2 = DOMAIN + "/?s=" + queryWithYear;
+      console.log("[UHDMovies] Search retry with year: " + url2);
+      return fetchText(url2).then(function(html2) {
+        return parseSearchResults(html2);
+      });
+    }
+    return results;
   }).catch(function(err) {
     console.error("[UHDMovies] Search error: " + err.message);
     return [];
@@ -291,6 +309,12 @@ function bypassHrefli(url) {
     return null;
   });
 }
+function bypassHrefliSafe(url) {
+  return withTimeout(bypassHrefli(url), 20000).catch(function(err) {
+    console.error("[UHDMovies] bypassHrefli timeout: " + err.message);
+    return null;
+  });
+}
 
 function followRedirectForUrl(link) {
   console.log("[UHDMovies] FollowRedirect: " + link);
@@ -302,25 +326,32 @@ function followRedirectForUrl(link) {
     return Promise.resolve(decoded);
   }
 
-  return fetch(link, {
+  return withTimeout(fetch(link, {
     headers: { "User-Agent": USER_AGENT },
     redirect: "follow"
-  }).then(function(res) {
+  }), 15000).then(function(res) {
     var finalUrl = res.url || "";
     console.log("[UHDMovies] Final URL (" + finalUrl.length + " chars): " + finalUrl.substring(0, 60) + "...");
     var urlParam = finalUrl.match(/[?&]url=(https?[^&\s]+)/);
     if (urlParam) {
       return decodeURIComponent(urlParam[1]);
     }
+    if (/googleusercontent\.com/.test(finalUrl)) return finalUrl;
+    if (/\.(mkv|mp4|m3u8)(\?|$)/i.test(finalUrl)) return finalUrl;
     
     return res.text().then(function(html) {
-      
       var metaUrl = html.match(/[?&]url=(https?:\/\/[^"&\s]+)/);
       if (metaUrl) return decodeURIComponent(metaUrl[1]);
      
       var dlBtn = html.match(/<a[^>]*href="(https?:\/\/video-downloads\.googleusercontent\.com[^"]+)"/i)
-                || html.match(/<a[^>]*href="(https?:\/\/[^"]+\.googleusercontent\.com[^"]+)"/i);
+                || html.match(/<a[^>]*href="(https?:\/\/[^"]+\.googleusercontent\.com[^"]+)"/i)
+                || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.workers\.dev[^"]+)"/i)
+                || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.r2\.dev[^"]+)"/i);
       if (dlBtn) return dlBtn[1];
+      
+      var videoSrc = html.match(/source[^>]*src="(https?:\/\/[^"]+)"/i)
+                   || html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i);
+      if (videoSrc) return videoSrc[1];
       return null;
     });
   }).catch(function(err) {
@@ -545,16 +576,14 @@ function getStreams(tmdbId, mediaType, season, episode) {
       return [];
     }
     var isSeries = mediaType === "series" || mediaType === "tv";
-    function processResult(index) {
-      if (index >= searchResults.length) return Promise.resolve(allStreams);
-      var result = searchResults[index];
+    var resultPromises = searchResults.map(function(result) {
       console.log("[UHDMovies] Processing: " + result.title);
       var linksPromise = isSeries && season && episode ? getTvEpisodeLink(result.url, season, episode) : getMovieLinks(result.url);
       return linksPromise.then(function(links) {
         var extractPromises = links.map(function(linkData) {
           var sourceLink = linkData.sourceLink;
           if (!sourceLink) return Promise.resolve([]);
-          var finalLinkPromise = sourceLink.indexOf("unblockedgames") !== -1 ? bypassHrefli(sourceLink) : Promise.resolve(sourceLink);
+          var finalLinkPromise = sourceLink.indexOf("unblockedgames") !== -1 ? bypassHrefliSafe(sourceLink) : Promise.resolve(sourceLink);
           return finalLinkPromise.then(function(finalLink) {
             if (!finalLink) return [];
             if (finalLink.indexOf("driveseed") !== -1 || finalLink.indexOf("driveleech") !== -1) {
@@ -575,14 +604,19 @@ function getStreams(tmdbId, mediaType, season, episode) {
           });
         });
         return Promise.all(extractPromises).then(function(results) {
-          results.forEach(function(streams) {
-            allStreams = allStreams.concat(streams);
-          });
-          return processResult(index + 1);
+          var streams = [];
+          results.forEach(function(s) { streams = streams.concat(s); });
+          return streams;
         });
+      }).catch(function(err) {
+        console.error("[UHDMovies] Process result error: " + err.message);
+        return [];
       });
-    }
-    return processResult(0).then(function(streams) {
+    });
+    return Promise.all(resultPromises).then(function(allResults) {
+      allResults.forEach(function(streams) {
+        allStreams = allStreams.concat(streams);
+      });
       function scoreStream(s) {
         var q = s.quality || "";
         var rScore = 0;
@@ -598,8 +632,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
         else if (/hdrip|dvdrip|hdtv/i.test(q)) sScore = 1;
         return rScore * 10 + sScore;
       }
-      streams.sort(function(a, b) { return scoreStream(b) - scoreStream(a); });
-      return streams;
+      allStreams.sort(function(a, b) { return scoreStream(b) - scoreStream(a); });
+      return allStreams;
     });
   }).catch(function(err) {
     console.error("[UHDMovies] Error: " + err.message);
