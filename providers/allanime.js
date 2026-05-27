@@ -4,6 +4,7 @@
 const AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
 const ALLANIME_BASE = "https://allanime.day";
 const ALLANIME_API = "https://api.allanime.day/api";
+const TMDB_API_KEY = "94fc7b2a9e6af14b1c78465d64e9e0d1";
 
 
 function getSimilarity(s1, s2) {
@@ -423,6 +424,55 @@ async function fetchLinksFromProvider(url) {
 }
 
 // ═══════════════════════════════════════════════════
+// TMDB TITLE FETCHING (primary title source)
+// ═══════════════════════════════════════════════════
+async function getTmdbTitles(tmdbId, type) {
+    const endpoint = type === 'movie' ? 'movie' : 'tv';
+    const url = `https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=alternative_titles`;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return { titles: [], originalName: '' };
+        const data = await res.json();
+
+        const seen = {};
+        const titles = [];
+        const addTitle = (t) => {
+            t = (t || '').trim();
+            if (t && !seen[t]) { seen[t] = true; titles.push(t); }
+        };
+
+        // Original name is best for anime search (usually Japanese/romaji)
+        const originalName = (data.original_name || data.original_title || '').trim();
+        const displayName = (data.name || data.title || '').trim();
+
+        // Original name first (most likely to match AllAnime's database)
+        addTitle(originalName);
+        // Short version (before colon/dash) — useful for long titles
+        const origShort = originalName.split(/\s*[:\-|]\s*/)[0].trim();
+        if (origShort !== originalName) addTitle(origShort);
+
+        addTitle(displayName);
+        const displayShort = displayName.split(/\s*[:\-|]\s*/)[0].trim();
+        if (displayShort !== displayName) addTitle(displayShort);
+
+        // Alternative titles (English, Japanese variants)
+        const altResults = (data.alternative_titles || {}).results || (data.alternative_titles || {}).titles || [];
+        for (const alt of altResults) {
+            const t = (alt.title || alt.name || '').trim();
+            addTitle(t);
+            const tShort = t.split(/\s*[:\-|]\s*/)[0].trim();
+            if (tShort !== t) addTitle(tShort);
+        }
+
+        console.log(`[AllAnime] TMDB titles (${titles.length}):`, titles.slice(0, 5));
+        return { titles, originalName: originalName || displayName };
+    } catch (e) {
+        console.error("[AllAnime] TMDB title fetch error:", e);
+        return { titles: [], originalName: '' };
+    }
+}
+
+// ═══════════════════════════════════════════════════
 // ID MAPPING (TMDB -> Anilist)
 // ═══════════════════════════════════════════════════
 async function getAnilistId(tmdbId, type) {
@@ -432,8 +482,14 @@ async function getAnilistId(tmdbId, type) {
         const res = await fetch(url);
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data) && data.length > 0 && data[0].anilist) {
-                return data[0].anilist;
+            if (Array.isArray(data) && data.length > 0) {
+                // Fix 4: Filter ARM results by type when multiple entries exist
+                if (data.length > 1) {
+                    // Prefer entries that have anilist IDs; we'll validate format later
+                    const withAnilist = data.filter(d => d.anilist);
+                    if (withAnilist.length > 0) return withAnilist[0].anilist;
+                }
+                if (data[0].anilist) return data[0].anilist;
             }
         }
     } catch (e) {
@@ -475,78 +531,250 @@ async function getAnilistMeta(anilistId) {
 }
 
 async function resolveAnilistEpisode(anilistId, targetSeason, targetEp, type) {
-    // Basic implementation: if it's movie, season 1 = absolute 1.
-    // If it's TV, we follow PREQUEL relations back to the root to calculate the absolute episode if needed.
-    // However, AllAnime uses absolute episodes or split names.
     const meta = await getAnilistMeta(anilistId);
-    if (!meta) return { title: null, ep: targetEp };
+    if (!meta) return { title: null, ep: targetEp, format: null };
 
     const title = meta.title.romaji || meta.title.english || "";
-    
-    // In Nuvio, since we pass TMDB, we usually get the EXACT Anilist ID for that season.
-    // So the relative episode in TMDB might exactly match the relative episode in that Anilist entry.
-    // E.g. TMDB Season 2, Ep 1 -> Anilist Season 2 (ID: xyz), Ep 1.
-    return { title, ep: targetEp };
+    const format = meta.format; // TV, TV_SHORT, MOVIE, OVA, ONA, SPECIAL, etc.
+
+    // Fix 3: Validate that Anilist entry format matches the requested type
+    if (type === 'tv' && format === 'MOVIE') {
+        console.log(`[AllAnime] Warning: Anilist ID ${anilistId} is MOVIE but type=tv, title may be wrong`);
+    }
+    if (type === 'movie' && format && format !== 'MOVIE') {
+        console.log(`[AllAnime] Warning: Anilist ID ${anilistId} is ${format} but type=movie`);
+    }
+
+    // Fix 1: Use season for search refinement — if season > 1, append it to title
+    let searchTitle = title;
+    if (type === 'tv' && targetSeason > 1) {
+        // For multi-season shows, Anilist often has separate entries per season
+        // but the ARM API may return the base entry. We keep the title as-is
+        // and let the season-aware search in getStreams handle variants.
+        console.log(`[AllAnime] Season ${targetSeason} requested, Anilist title: ${title}`);
+    }
+
+    // Validate episode count if available
+    if (meta.episodes && targetEp > meta.episodes) {
+        console.log(`[AllAnime] Warning: Requested ep ${targetEp} > Anilist episodes ${meta.episodes}`);
+    }
+
+    return { title: searchTitle, ep: targetEp, format };
+}
+
+// ═══════════════════════════════════════════════════
+// TYPE-AWARE MATCH SCORING
+// ═══════════════════════════════════════════════════
+const MOVIE_KEYWORDS = /\b(movie|film|gekijouban|gekijō|gekijo)\b/i;
+
+function pickBestMatch(results, targetTitle, type, targetEpisode) {
+    if (!results || results.length === 0) return null;
+
+    // Pre-filter by type using episode count as proxy
+    let typeFiltered;
+    if (type === 'tv') {
+        // For TV, prefer results with more than 1 episode (not movies)
+        typeFiltered = results.filter(r => r.episodes > 1);
+    } else if (type === 'movie') {
+        // For movies, prefer results with 0 or 1 episodes
+        typeFiltered = results.filter(r => r.episodes <= 1);
+    } else {
+        typeFiltered = results;
+    }
+
+    // If type-filtering removes everything, fall back to all results
+    const candidates = typeFiltered.length > 0 ? typeFiltered : results;
+
+    let bestScore = -1;
+    let bestMatch = null;
+
+    for (const r of candidates) {
+        let score = getSimilarity(r.name, targetTitle);
+
+        // Type-aware penalties and bonuses
+        if (type === 'tv') {
+            // Penalize results with movie/film in the name
+            if (MOVIE_KEYWORDS.test(r.name)) {
+                score *= 0.5;
+            }
+            // Bonus for results that have enough episodes for the requested episode
+            if (targetEpisode && r.episodes >= targetEpisode) {
+                score *= 1.1;
+            }
+            // Penalize single-episode results (likely movies)
+            if (r.episodes <= 1) {
+                score *= 0.6;
+            }
+        } else if (type === 'movie') {
+            // Bonus for single-episode / movie results
+            if (r.episodes <= 1) {
+                score *= 1.1;
+            }
+            // Penalize multi-episode results (likely TV series)
+            if (r.episodes > 1) {
+                score *= 0.7;
+            }
+        }
+
+        // Cap score at 1.0
+        score = Math.min(score, 1.0);
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestMatch = r;
+        }
+    }
+
+    // Fix 5: Raised threshold from 0.4 to 0.55
+    if (bestMatch && bestScore > 0.55) {
+        console.log(`[AllAnime] Best match: "${bestMatch.name}" (score=${bestScore.toFixed(3)}, eps=${bestMatch.episodes})`);
+        return bestMatch;
+    }
+
+    // Fix 6: Don't fallback blindly to results[0] — use type-filtered first result
+    if (candidates.length > 0) {
+        console.log(`[AllAnime] No good similarity match (best=${bestScore.toFixed(3)}), using first type-filtered result: "${candidates[0].name}"`);
+        return candidates[0];
+    }
+
+    console.log(`[AllAnime] No match found at all`);
+    return null;
+}
+
+// ═══════════════════════════════════════════════════
+// SEASON-AWARE QUERY GENERATION
+// ═══════════════════════════════════════════════════
+function generateSearchQueries(baseTitle, type, season) {
+    const queries = [baseTitle];
+    const seen = new Set([baseTitle.toLowerCase()]);
+
+    const addQuery = (q) => {
+        const lower = q.toLowerCase();
+        if (!seen.has(lower)) {
+            seen.add(lower);
+            queries.push(q);
+        }
+    };
+
+    if (type === 'tv' && season > 1) {
+        // Try title + season variants
+        addQuery(`${baseTitle} Season ${season}`);
+        addQuery(`${baseTitle} Part ${season}`);
+        addQuery(`${baseTitle} ${season}`);
+        // Some shows use "2nd Season", "3rd Season"
+        const ordinals = { 2: '2nd', 3: '3rd', 4: '4th', 5: '5th', 6: '6th' };
+        if (ordinals[season]) {
+            addQuery(`${baseTitle} ${ordinals[season]} Season`);
+        }
+    }
+
+    return queries;
 }
 
 // ═══════════════════════════════════════════════════
 // MAIN PROVIDER FUNCTION
 // ═══════════════════════════════════════════════════
 async function getStreams(id, type, season, episode) {
-    // id in Nuvio is typically the TMDB ID or IMDb ID.
-    // Assume Nuvio passes TMDB ID for 'id'. Let's find Anilist ID.
     const tmdbId = id;
-    const anilistId = await getAnilistId(tmdbId, type);
-    console.log("Anilist ID:", anilistId);
 
-    let searchTitle = "Anime";
+    // Fix 1: ALWAYS fetch from TMDB first (like animesalt/anime-sama)
+    const tmdbData = await getTmdbTitles(tmdbId, type);
+    let primaryTitle = tmdbData.originalName || '';
+    const allTmdbTitles = tmdbData.titles;
+
+    // Secondary: Anilist chain (provides additional title + format validation)
+    const anilistId = await getAnilistId(tmdbId, type);
+    console.log("[AllAnime] Anilist ID:", anilistId);
+
+    let anilistTitle = '';
     let subEp = String(episode);
     let dubEp = String(episode);
 
     if (anilistId) {
         const resolved = await resolveAnilistEpisode(anilistId, season, episode, type);
-        console.log("Resolved:", resolved);
-        searchTitle = resolved.title || searchTitle;
+        console.log("[AllAnime] Anilist resolved:", resolved);
+        anilistTitle = resolved.title || '';
         subEp = String(resolved.ep);
         dubEp = String(resolved.ep);
-    } else {
-        // Fallback title fetch from TMDB
-        try {
-            const res = await fetch(`https://api.themoviedb.org/3/${type === 'movie' ? 'movie' : 'tv'}/${tmdbId}?api_key=94fc7b2a9e6af14b1c78465d64e9e0d1`);
-            if (res.ok) {
-                const data = await res.json();
-                searchTitle = data.name || data.title || searchTitle;
-            }
-        } catch (e) {}
     }
 
-    console.log("Search title:", searchTitle);
-    const uniqueQueries = [searchTitle];
+    // Use TMDB original name as primary, Anilist as secondary
+    let searchTitle = primaryTitle || anilistTitle || 'Anime';
+    console.log(`[AllAnime] Primary search title: "${searchTitle}"`);
 
-    const [subResults, dubResults] = await Promise.all([
+    // Fix 5: Generate season-aware queries
+    const baseQueries = generateSearchQueries(searchTitle, type, season);
+
+    // Add Anilist title as additional query if different from TMDB
+    if (anilistTitle && anilistTitle.toLowerCase() !== searchTitle.toLowerCase()) {
+        const anilistQueries = generateSearchQueries(anilistTitle, type, season);
+        for (const q of anilistQueries) {
+            if (!baseQueries.map(x => x.toLowerCase()).includes(q.toLowerCase())) {
+                baseQueries.push(q);
+            }
+        }
+    }
+
+    // Add alternative TMDB titles that aren't already in the list
+    for (const t of allTmdbTitles) {
+        if (!baseQueries.map(x => x.toLowerCase()).includes(t.toLowerCase())) {
+            baseQueries.push(t);
+        }
+    }
+
+    // Limit total queries to avoid excessive API calls
+    const uniqueQueries = baseQueries.slice(0, 6);
+    console.log(`[AllAnime] Search queries (${uniqueQueries.length}):`, uniqueQueries);
+
+    // Search with ALL query candidates, merge results
+    let allSubResults = [];
+    let allDubResults = [];
+    const seenSubIds = new Set();
+    const seenDubIds = new Set();
+
+    // Search first query for both sub and dub in parallel
+    const [firstSubResults, firstDubResults] = await Promise.all([
         searchAnime(uniqueQueries[0], "sub").catch(() => []),
         searchAnime(uniqueQueries[0], "dub").catch(() => [])
     ]);
 
-    console.log(`Sub results: ${subResults.length}, Dub results: ${dubResults.length}`);
+    for (const r of firstSubResults) {
+        if (!seenSubIds.has(r.id)) { seenSubIds.add(r.id); allSubResults.push(r); }
+    }
+    for (const r of firstDubResults) {
+        if (!seenDubIds.has(r.id)) { seenDubIds.add(r.id); allDubResults.push(r); }
+    }
 
-    const pickBestMatch = (results, targetTitle) => {
-        if (!results || results.length === 0) return null;
-        let bestSimScore = 0;
-        let bestSim = null;
-        for (const r of results) {
-            const sim = getSimilarity(r.name, targetTitle);
-            if (sim > bestSimScore) {
-                bestSimScore = sim;
-                bestSim = r;
+    // Search additional queries if first query didn't produce a good type-filtered match
+    const hasGoodSubMatch = allSubResults.some(r =>
+        type === 'tv' ? r.episodes > 1 : r.episodes <= 1
+    );
+
+    if (!hasGoodSubMatch && uniqueQueries.length > 1) {
+        for (let i = 1; i < uniqueQueries.length; i++) {
+            const [extraSub, extraDub] = await Promise.all([
+                searchAnime(uniqueQueries[i], "sub").catch(() => []),
+                searchAnime(uniqueQueries[i], "dub").catch(() => [])
+            ]);
+            for (const r of extraSub) {
+                if (!seenSubIds.has(r.id)) { seenSubIds.add(r.id); allSubResults.push(r); }
             }
+            for (const r of extraDub) {
+                if (!seenDubIds.has(r.id)) { seenDubIds.add(r.id); allDubResults.push(r); }
+            }
+            // Stop early if we found a type-matching result
+            const nowGood = allSubResults.some(r =>
+                type === 'tv' ? r.episodes > 1 : r.episodes <= 1
+            );
+            if (nowGood) break;
         }
-        if (bestSim && bestSimScore > 0.4) return bestSim;
-        return results[0]; // fallback
-    };
+    }
 
-    let matchSub = pickBestMatch(subResults, searchTitle);
-    let matchDub = pickBestMatch(dubResults, searchTitle);
+    console.log(`[AllAnime] Sub results: ${allSubResults.length}, Dub results: ${allDubResults.length}`);
+
+    // Fix 2 & 4: Type-aware pickBestMatch with improved scoring
+    let matchSub = pickBestMatch(allSubResults, searchTitle, type, episode);
+    let matchDub = pickBestMatch(allDubResults, searchTitle, type, episode);
 
     const streams = [];
 

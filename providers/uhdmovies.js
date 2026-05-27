@@ -209,21 +209,31 @@ function getTmdbDetails(tmdbId, mediaType) {
   });
 }
 function searchByTitle(title, year) {
-  var query = encodeURIComponent(title.trim()).replace(/%20/g, "+");
-  var url = DOMAIN + "/?s=" + query;
-  console.log("[UHDMovies] Search: " + url);
-  return fetchText(url).then(function(html) {
-    var results = parseSearchResults(html);
-    if (results.length > 0) return results;
-    if (year) {
-      var queryWithYear = encodeURIComponent((title + " " + year).trim()).replace(/%20/g, "+");
-      var url2 = DOMAIN + "/?s=" + queryWithYear;
-      console.log("[UHDMovies] Search retry with year: " + url2);
+  // Search with year first (more specific = faster match), then fallback to title-only
+  if (year) {
+    var queryWithYear = encodeURIComponent((title + " " + year).trim()).replace(/%20/g, "+");
+    var url = DOMAIN + "/?s=" + queryWithYear;
+    console.log("[UHDMovies] Search (with year): " + url);
+    return fetchText(url).then(function(html) {
+      var results = parseSearchResults(html);
+      if (results.length > 0) return results;
+      // Fallback: search without year
+      var queryTitle = encodeURIComponent(title.trim()).replace(/%20/g, "+");
+      var url2 = DOMAIN + "/?s=" + queryTitle;
+      console.log("[UHDMovies] Search retry without year: " + url2);
       return fetchText(url2).then(function(html2) {
         return parseSearchResults(html2);
       });
-    }
-    return results;
+    }).catch(function(err) {
+      console.error("[UHDMovies] Search error: " + err.message);
+      return [];
+    });
+  }
+  var query = encodeURIComponent(title.trim()).replace(/%20/g, "+");
+  var url3 = DOMAIN + "/?s=" + query;
+  console.log("[UHDMovies] Search: " + url3);
+  return fetchText(url3).then(function(html) {
+    return parseSearchResults(html);
   }).catch(function(err) {
     console.error("[UHDMovies] Search error: " + err.message);
     return [];
@@ -310,7 +320,7 @@ function bypassHrefli(url) {
   });
 }
 function bypassHrefliSafe(url) {
-  return withTimeout(bypassHrefli(url), 20000).catch(function(err) {
+  return withTimeout(bypassHrefli(url), 6000).catch(function(err) {
     console.error("[UHDMovies] bypassHrefli timeout: " + err.message);
     return null;
   });
@@ -329,7 +339,7 @@ function followRedirectForUrl(link) {
   return withTimeout(fetch(link, {
     headers: { "User-Agent": USER_AGENT },
     redirect: "follow"
-  }), 15000).then(function(res) {
+  }), 5000).then(function(res) {
     var finalUrl = res.url || "";
     console.log("[UHDMovies] Final URL (" + finalUrl.length + " chars): " + finalUrl.substring(0, 60) + "...");
     var urlParam = finalUrl.match(/[?&]url=(https?[^&\s]+)/);
@@ -564,9 +574,13 @@ function getTvEpisodeLink(pageUrl, targetSeason, targetEpisode) {
   });
 }
 function getStreams(tmdbId, mediaType, season, episode) {
-  console.log("[UHDMovies] getStreams " + mediaType + " " + tmdbId);
+  var startTime = Date.now();
+  console.log("[UHDMovies] getStreams " + mediaType + " " + (typeof tmdbId === 'object' ? tmdbId.title : tmdbId));
   var allStreams = [];
-  return getTmdbDetails(tmdbId, mediaType).then(function(tmdbDetails) {
+  var earlyStop = false;
+  var MAX_STREAMS = 8;
+  var tmdbPromise = typeof tmdbId === 'object' ? Promise.resolve(tmdbId) : getTmdbDetails(tmdbId, mediaType);
+  return tmdbPromise.then(function(tmdbDetails) {
     if (!tmdbDetails) return [];
     console.log("[UHDMovies] Title: " + tmdbDetails.title + " (" + tmdbDetails.year + ")");
     return searchByTitle(tmdbDetails.title, tmdbDetails.year);
@@ -576,37 +590,56 @@ function getStreams(tmdbId, mediaType, season, episode) {
       return [];
     }
     var isSeries = mediaType === "series" || mediaType === "tv";
-    var resultPromises = searchResults.map(function(result) {
+    // Only process top 2 search results for speed
+    var topResults = searchResults.slice(0, 2);
+    console.log("[UHDMovies] Processing top " + topResults.length + " of " + searchResults.length + " results");
+    var globalRequestIndex = 0;
+    var resultPromises = topResults.map(function(result) {
       console.log("[UHDMovies] Processing: " + result.title);
       var linksPromise = isSeries && season && episode ? getTvEpisodeLink(result.url, season, episode) : getMovieLinks(result.url);
       return linksPromise.then(function(links) {
-        var extractPromises = links.map(function(linkData) {
-          var sourceLink = linkData.sourceLink;
-          if (!sourceLink) return Promise.resolve([]);
-          var finalLinkPromise = sourceLink.indexOf("unblockedgames") !== -1 ? bypassHrefliSafe(sourceLink) : Promise.resolve(sourceLink);
-          return finalLinkPromise.then(function(finalLink) {
-            if (!finalLink) return [];
-            if (finalLink.indexOf("driveseed") !== -1 || finalLink.indexOf("driveleech") !== -1) {
-              return extractDriveseedPage(finalLink);
-            }
-            if (finalLink.indexOf("video-seed") !== -1) {
-              return extractVideoSeed(finalLink).then(function(url) {
-                if (!url) return [];
-                return [{ name: "UHDMovies", title: "UHDMovies " + (linkData.quality || "Unknown"), url, quality: linkData.quality || "Unknown" }];
-              });
-            }
-            return [{
-              name: "UHDMovies",
-              title: "UHDMovies " + (linkData.sourceName || linkData.quality || ""),
-              url: finalLink,
-              quality: linkData.quality || "Unknown"
-            }];
+        var promises = links.map(function(linkData) {
+          // 50ms stagger (was 600ms) — just enough to avoid rate limiting
+          var delay = (globalRequestIndex++) * 50;
+          return new Promise(function(resolve) {
+            setTimeout(resolve, delay);
+          }).then(function() {
+            // Early termination: skip remaining if we already have enough streams
+            if (earlyStop) return [];
+            var sourceLink = linkData.sourceLink;
+            if (!sourceLink) return [];
+            var finalLinkPromise = sourceLink.indexOf("unblockedgames") !== -1 ? bypassHrefliSafe(sourceLink) : Promise.resolve(sourceLink);
+            return finalLinkPromise.then(function(finalLink) {
+              if (!finalLink || earlyStop) return [];
+              if (finalLink.indexOf("driveseed") !== -1 || finalLink.indexOf("driveleech") !== -1) {
+                return extractDriveseedPage(finalLink);
+              }
+              if (finalLink.indexOf("video-seed") !== -1) {
+                return extractVideoSeed(finalLink).then(function(url) {
+                  if (!url) return [];
+                  return [{ name: "UHDMovies", title: "UHDMovies " + (linkData.quality || "Unknown"), url: url, quality: linkData.quality || "Unknown" }];
+                });
+              }
+              return [{
+                name: "UHDMovies",
+                title: "UHDMovies " + (linkData.sourceName || linkData.quality || ""),
+                url: finalLink,
+                quality: linkData.quality || "Unknown"
+              }];
+            }).catch(function(err) {
+              console.error("[UHDMovies] finalLink processing error: " + err.message);
+              return [];
+            });
           });
         });
-        return Promise.all(extractPromises).then(function(results) {
-          var streams = [];
-          results.forEach(function(s) { streams = streams.concat(s); });
-          return streams;
+        return Promise.all(promises).then(function(resultsArray) {
+          var combined = [];
+          resultsArray.forEach(function(arr) {
+            combined = combined.concat(arr);
+            // Check if we have enough streams for early termination of subsequent results
+            if (allStreams.length + combined.length >= MAX_STREAMS) earlyStop = true;
+          });
+          return combined;
         });
       }).catch(function(err) {
         console.error("[UHDMovies] Process result error: " + err.message);
@@ -633,6 +666,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
         return rScore * 10 + sScore;
       }
       allStreams.sort(function(a, b) { return scoreStream(b) - scoreStream(a); });
+      var elapsed = Date.now() - startTime;
+      console.log("[UHDMovies] Done: " + allStreams.length + " streams in " + elapsed + "ms");
       return allStreams;
     });
   }).catch(function(err) {
@@ -641,7 +676,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
   });
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams };
+  module.exports = { getStreams, bypassHrefli };
 } else {
   global.getStreams = getStreams;
 }
