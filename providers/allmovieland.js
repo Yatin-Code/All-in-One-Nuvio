@@ -1,6 +1,6 @@
 /**
  * allmovieland - Built from src/allmovieland/
- * Generated: 2026-03-21T08:41:32.620Z
+ * Generated: 2026-05-27T18:41:02.399Z
  */
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -68,7 +68,7 @@ var import_cheerio_without_node_native = __toESM(require("cheerio-without-node-n
 // src/allmovieland/constants.js
 var TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 var TMDB_BASE_URL = "https://api.themoviedb.org/3";
-var MAIN_URL = "https://allmovieland.io";
+var MAIN_URL = "https://allmovieland.you";
 var HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -160,8 +160,8 @@ function getStreams(tmdbId, mediaType = "movie", season = null, episode = null) 
       $("article.short-mid").each((i, el) => {
         const title = $(el).find("a > h3").text().trim();
         const href = $(el).find("a").attr("href");
-        const yearMatch = title.match(/\((\d{4})\)/);
-        const year = yearMatch ? parseInt(yearMatch[1]) : null;
+        const yearMatch = title.match(new RegExp("(?<=\\()[\\d(\\]]+(?=\\))"));
+        const year = yearMatch ? parseInt(yearMatch[0]) : null;
         searchResults.push({ title, href, year });
       });
       if (searchResults.length === 0) {
@@ -169,11 +169,7 @@ function getStreams(tmdbId, mediaType = "movie", season = null, episode = null) 
         return [];
       }
       const bestMatch = findBestTitleMatch(mediaInfo, searchResults);
-      if (!bestMatch) {
-        console.log("[AllMovieLand] No confident match found.");
-        return [];
-      }
-      const selectedMedia = bestMatch;
+      const selectedMedia = bestMatch || searchResults[0];
       console.log(`[AllMovieLand] Selected: "${selectedMedia.title}" (${selectedMedia.href})`);
       const docRes = yield fetch(selectedMedia.href, { headers: HEADERS });
       const docHtml = yield docRes.text();
@@ -211,19 +207,9 @@ function getStreams(tmdbId, mediaType = "movie", season = null, episode = null) 
       if (mediaType === "movie") {
         targetFiles = parsedData.filter((s) => s && s.file);
       } else if (mediaType === "tv") {
-        const seasonData = parsedData.find((s) => {
-          const sTitle = s.title || "";
-          const sNumMatch = sTitle.match(/Season\s*(\d+)/i) || sTitle.match(/(\d+)\s*Season/i);
-          const sNum = sNumMatch ? parseInt(sNumMatch[1]) : null;
-          return sNum === season || s.id == season;
-        });
+        const seasonData = parsedData.find((s) => s.id == season);
         if (seasonData && seasonData.folder) {
-          const episodeData = seasonData.folder.find((e) => {
-            const eTitle = e.title || "";
-            const eNumMatch = eTitle.match(/Episode\s*(\d+)/i) || eTitle.match(/(\d+)\s*Episode/i);
-            const eNum = eNumMatch ? parseInt(eNumMatch[1]) : null;
-            return eNum === episode || e.episode == episode;
-          });
+          const episodeData = seasonData.folder.find((e) => e.episode == episode);
           if (episodeData && episodeData.folder) {
             targetFiles = episodeData.folder.filter((s) => s && s.file);
           }

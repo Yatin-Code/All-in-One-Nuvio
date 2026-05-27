@@ -372,9 +372,8 @@ function followRedirectForUrl(link) {
 var CLOUDFLARE_PROXY = "https://nuvio-proxy-worker.yatinstudyies.workers.dev/?url=";
 
 function wrapWithProxy(url) {
-  if (url && url.includes("googleusercontent.com")) {
-    return CLOUDFLARE_PROXY + encodeURIComponent(url);
-  }
+  // If the scraper runs locally on the device, wrapping it in a CF proxy actually breaks
+  // IP-locked googleusercontent links because Cloudflare's IP doesn't match the generator's IP.
   return url;
 }
 

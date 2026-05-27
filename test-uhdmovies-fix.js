@@ -6,18 +6,18 @@ const { getStreams } = require('./providers/uhdmovies.js');
 
 const TESTS = [
   {
-    label: "Movie: Oppenheimer (2023)",
-    tmdbId: { title: "Oppenheimer", year: "2023" },
+    label: "Movie: Project Hail Marry (Typo)",
+    tmdbId: { title: "Project Hail Marry", year: "2026" },
     mediaType: "movie",
     season: null,
     episode: null
   },
   {
-    label: "TV Show: Spider-Noir S01E01",
-    tmdbId: { title: "Spider-Noir", year: "2025" },
-    mediaType: "series",
-    season: 1,
-    episode: 1
+    label: "Movie: Oppenheimer (2023)",
+    tmdbId: { title: "Oppenheimer", year: "2023" },
+    mediaType: "movie",
+    season: null,
+    episode: null
   }
 ];
 
