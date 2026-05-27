@@ -1,20 +1,43 @@
 "use strict";
-
-
+var __async = (__this, __arguments, generator) => {
+  return new Promise((resolve, reject) => {
+    var fulfilled = (value) => {
+      try {
+        step(generator.next(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var rejected = (value) => {
+      try {
+        step(generator.throw(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+    step((generator = generator.apply(__this, __arguments)).next());
+  });
+};
 var DOMAIN = "https://uhdmovies.rodeo";
 var TMDB_API = "https://api.themoviedb.org/3";
 var TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 function getBaseUrl(url) {
-  if (!url) return DOMAIN;
+  if (!url)
+    return DOMAIN;
   var match = url.match(/^(https?:\/\/[^\/]+)/);
   return match ? match[1] : DOMAIN;
 }
 function fixUrl(url, domain) {
-  if (!url) return "";
-  if (url.indexOf("http") === 0) return url;
-  if (url.indexOf("//") === 0) return "https:" + url;
-  if (url.indexOf("/") === 0) return domain + url;
+  if (!url)
+    return "";
+  if (url.indexOf("http") === 0)
+    return url;
+  if (url.indexOf("//") === 0)
+    return "https:" + url;
+  if (url.indexOf("/") === 0)
+    return domain + url;
   return domain + "/" + url;
 }
 function toFormEncoded(obj) {
@@ -38,7 +61,8 @@ function extractFormInputs(html) {
   while ((m = re.exec(formHtml)) !== null) {
     var nameM = m[0].match(/name="([^"]+)"/i);
     var valueM = m[0].match(/value="([^"]*)"/i);
-    if (nameM) obj[nameM[1]] = valueM ? valueM[1] : "";
+    if (nameM)
+      obj[nameM[1]] = valueM ? valueM[1] : "";
   }
   return obj;
 }
@@ -46,13 +70,15 @@ function extractScriptContaining(html, needle) {
   var re = /<script[^>]*>([\s\S]*?)<\/script>/gi;
   var m;
   while ((m = re.exec(html)) !== null) {
-    if (m[1].indexOf(needle) !== -1) return m[1];
+    if (m[1].indexOf(needle) !== -1)
+      return m[1];
   }
   return "";
 }
 function extractMetaRefresh(html) {
   var m = html.match(/<meta[^>]*http-equiv="refresh"[^>]*content="([^"]+)"/i) || html.match(/<meta[^>]*content="([^"]+)"[^>]*http-equiv="refresh"/i);
-  if (!m) return null;
+  if (!m)
+    return null;
   var urlM = m[1].match(/url=(.+)/i);
   return urlM ? urlM[1].trim() : null;
 }
@@ -99,33 +125,44 @@ function extractThirdListItem(html) {
   var m;
   while ((m = re.exec(html)) !== null) {
     count++;
-    if (count === 3) return stripTags(m[1]);
+    if (count === 3)
+      return stripTags(m[1]);
   }
   return "";
 }
 function getIndexQuality(str) {
-  if (!str) return "Unknown";
-
+  if (!str)
+    return "Unknown";
   var m = str.match(/(\d{3,4})[pP]/);
-  if (m) return m[1] + "p";
-
-  if (/\b4[kK]\b/.test(str) || /\bUHD\b(?!movies)/i.test(str)) return "2160p";
+  if (m)
+    return m[1] + "p";
+  if (/\b4[kK]\b/.test(str) || /\bUHD\b(?!movies)/i.test(str))
+    return "2160p";
   return "Unknown";
 }
 function buildQualityLabel(str) {
   var resolution = getIndexQuality(str);
   var label = resolution === "2160p" ? "4K" : resolution;
   var fuente = null;
-  if (/remux/i.test(str))           fuente = "BluRay REMUX";
-  else if (/blu.?ray|bluray/i.test(str)) fuente = "BluRay";
-  else if (/web.?dl/i.test(str))    fuente = "WEB-DL";
-  else if (/webrip/i.test(str))     fuente = "WEBRip";
-  else if (/hdrip/i.test(str))      fuente = "HDRip";
-  else if (/dvdrip/i.test(str))     fuente = "DVDRip";
-  else if (/hdtv/i.test(str))       fuente = "HDTV";
+  if (/remux/i.test(str))
+    fuente = "BluRay REMUX";
+  else if (/blu.?ray|bluray/i.test(str))
+    fuente = "BluRay";
+  else if (/web.?dl/i.test(str))
+    fuente = "WEB-DL";
+  else if (/webrip/i.test(str))
+    fuente = "WEBRip";
+  else if (/hdrip/i.test(str))
+    fuente = "HDRip";
+  else if (/dvdrip/i.test(str))
+    fuente = "DVDRip";
+  else if (/hdtv/i.test(str))
+    fuente = "HDTV";
   var codec = null;
-  if (/\bHEVC\b|\bx265\b|\bH\.?265\b/i.test(str))      codec = "x265/HEVC";
-  else if (/\bAVC\b|\bx264\b|\bH\.?264\b/i.test(str))  codec = "x264/AVC";
+  if (/\bHEVC\b|\bx265\b|\bH\.?265\b/i.test(str))
+    codec = "x265/HEVC";
+  else if (/\bAVC\b|\bx264\b|\bH\.?264\b/i.test(str))
+    codec = "x264/AVC";
   return [label, fuente, codec].filter(Boolean).join(" | ");
 }
 function cleanTitle(title) {
@@ -143,7 +180,8 @@ function cleanTitle(title) {
         break;
       }
     }
-    if (startIndex !== -1) break;
+    if (startIndex !== -1)
+      break;
   }
   var endIndex = -1;
   for (var j = parts.length - 1; j >= 0; j--) {
@@ -169,74 +207,86 @@ function cleanTitle(title) {
   return parts.slice(-3).join(".");
 }
 function fetchText(url, extraHeaders) {
-  var headers = Object.assign({ "User-Agent": USER_AGENT }, extraHeaders || {});
-  return fetch(url, { headers, redirect: "follow" }).then(function(res) {
-    return res.text();
+  return __async(this, null, function* () {
+    const headers = Object.assign({ "User-Agent": USER_AGENT }, extraHeaders || {});
+    const res = yield fetch(url, { headers, redirect: "follow" });
+    return yield res.text();
   });
 }
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
     new Promise(function(_, reject) {
-      setTimeout(function() { reject(new Error("Timeout after " + ms + "ms")); }, ms);
+      setTimeout(function() {
+        reject(new Error("Timeout after " + ms + "ms"));
+      }, ms);
     })
   ]);
 }
 function fetchJson(url) {
-  return fetch(url, { headers: { "User-Agent": USER_AGENT } }).then(function(res) {
-    return res.json();
+  return __async(this, null, function* () {
+    const res = yield fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    return yield res.json();
   });
 }
 function getTmdbDetails(tmdbId, mediaType) {
-  var isSeries = mediaType === "series" || mediaType === "tv";
-  var endpoint = isSeries ? "tv" : "movie";
-  var url = TMDB_API + "/" + endpoint + "/" + tmdbId + "?api_key=" + TMDB_API_KEY;
-  console.log("[UHDMovies] TMDB: " + url);
-  return fetchJson(url).then(function(data) {
-    if (isSeries) {
+  return __async(this, null, function* () {
+    try {
+      var isSeries = mediaType === "series" || mediaType === "tv";
+      var endpoint = isSeries ? "tv" : "movie";
+      var url = TMDB_API + "/" + endpoint + "/" + tmdbId + "?api_key=" + TMDB_API_KEY;
+      console.log("[UHDMovies] TMDB: " + url);
+      const data = yield fetchJson(url);
+      if (!data)
+        return null;
+      if (isSeries) {
+        return {
+          title: data.name || null,
+          year: data.first_air_date ? data.first_air_date.slice(0, 4) : null
+        };
+      }
       return {
-        title: data.name,
-        year: data.first_air_date ? data.first_air_date.slice(0, 4) : null
+        title: data.title || null,
+        year: data.release_date ? data.release_date.slice(0, 4) : null
       };
+    } catch (err) {
+      console.error("[UHDMovies] TMDB error: " + err.message);
+      return null;
     }
-    return {
-      title: data.title,
-      year: data.release_date ? data.release_date.slice(0, 4) : null
-    };
-  }).catch(function(err) {
-    console.error("[UHDMovies] TMDB error: " + err.message);
-    return null;
   });
 }
 function searchByTitle(title, year) {
-  // Search with year first (more specific = faster match), then fallback to title-only
-  if (year) {
-    var queryWithYear = encodeURIComponent((title + " " + year).trim()).replace(/%20/g, "+");
-    var url = DOMAIN + "/?s=" + queryWithYear;
-    console.log("[UHDMovies] Search (with year): " + url);
-    return fetchText(url).then(function(html) {
-      var results = parseSearchResults(html);
-      if (results.length > 0) return results;
-      // Fallback: search without year
-      var queryTitle = encodeURIComponent(title.trim()).replace(/%20/g, "+");
-      var url2 = DOMAIN + "/?s=" + queryTitle;
-      console.log("[UHDMovies] Search retry without year: " + url2);
-      return fetchText(url2).then(function(html2) {
+  return __async(this, null, function* () {
+    if (!title)
+      return [];
+    try {
+      if (year) {
+        var queryWithYear = encodeURIComponent((title + " " + year).trim()).replace(/%20/g, "+");
+        var url = DOMAIN + "/?s=" + queryWithYear;
+        console.log("[UHDMovies] Search (with year): " + url);
+        try {
+          const html = yield fetchText(url);
+          var results = parseSearchResults(html);
+          if (results.length > 0)
+            return results;
+        } catch (e) {
+          console.error("[UHDMovies] Year search failed: " + e.message);
+        }
+        var queryTitle = encodeURIComponent(title.trim()).replace(/%20/g, "+");
+        var url2 = DOMAIN + "/?s=" + queryTitle;
+        console.log("[UHDMovies] Search retry without year: " + url2);
+        const html2 = yield fetchText(url2);
         return parseSearchResults(html2);
-      });
-    }).catch(function(err) {
+      }
+      var query = encodeURIComponent(title.trim()).replace(/%20/g, "+");
+      var url3 = DOMAIN + "/?s=" + query;
+      console.log("[UHDMovies] Search: " + url3);
+      const html3 = yield fetchText(url3);
+      return parseSearchResults(html3);
+    } catch (err) {
       console.error("[UHDMovies] Search error: " + err.message);
       return [];
-    });
-  }
-  var query = encodeURIComponent(title.trim()).replace(/%20/g, "+");
-  var url3 = DOMAIN + "/?s=" + query;
-  console.log("[UHDMovies] Search: " + url3);
-  return fetchText(url3).then(function(html) {
-    return parseSearchResults(html);
-  }).catch(function(err) {
-    console.error("[UHDMovies] Search error: " + err.message);
-    return [];
+    }
   });
 }
 function parseSearchResults(html) {
@@ -245,7 +295,8 @@ function parseSearchResults(html) {
   for (var i = 1; i < chunks.length; i++) {
     var chunk = "<article" + chunks[i];
     var classM = chunk.match(/<article[^>]*class="([^"]*)"/i);
-    if (!classM || classM[1].indexOf("gridlove-post") === -1) continue;
+    if (!classM || classM[1].indexOf("gridlove-post") === -1)
+      continue;
     var h1M = chunk.match(/<h1[^>]*class="[^"]*sanket[^"]*"[^>]*>([\s\S]*?)<\/h1>/i);
     var titleRaw = h1M ? stripTags(h1M[1]).replace(/^Download\s+/i, "") : "";
     var titleM = titleRaw.match(/^(.*\)\d*)/);
@@ -260,418 +311,479 @@ function parseSearchResults(html) {
   return results;
 }
 function bypassHrefli(url) {
-  var host = getBaseUrl(url);
-  console.log("[UHDMovies] bypassHrefli: " + url);
-  return fetchText(url).then(function(html) {
-    var formUrl = extractFormAction(html);
-    var formData = extractFormInputs(html);
-    if (!formUrl) return Promise.resolve(null);
-    return fetch(formUrl, {
-      method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: toFormEncoded(formData)
-    }).then(function(res) {
-      return res.text();
-    });
-  }).then(function(html) {
-    if (!html) return null;
-    var formUrl = extractFormAction(html);
-    var formData = extractFormInputs(html);
-    if (!formUrl) return null;
-    return fetch(formUrl, {
-      method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: toFormEncoded(formData)
-    }).then(function(res) {
-      return res.text().then(function(t) {
-        return { html: t, formData };
+  return __async(this, null, function* () {
+    try {
+      var host = getBaseUrl(url);
+      console.log("[UHDMovies] bypassHrefli: " + url);
+      const html = yield fetchText(url);
+      var formUrl = extractFormAction(html);
+      var formData = extractFormInputs(html);
+      if (!formUrl)
+        return null;
+      const res1 = yield fetch(formUrl, {
+        method: "POST",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: toFormEncoded(formData)
       });
-    });
-  }).then(function(result) {
-    if (!result) return null;
-    var script = extractScriptContaining(result.html, "?go=");
-    var skTokenM = script.match(/\?go=([^"]+)/);
-    if (!skTokenM) return null;
-    var skToken = skTokenM[1];
-    var wpHttp2 = result.formData["_wp_http2"] || "";
-    return fetchText(host + "?go=" + skToken, {
-      "Cookie": skToken + "=" + wpHttp2
-    });
-  }).then(function(html) {
-    if (!html) return null;
-    var driveUrl = extractMetaRefresh(html);
-    return driveUrl || null;
-  }).then(function(driveUrl) {
-    if (!driveUrl) return null;
-    return fetchText(driveUrl).then(function(html) {
-      var pathM = html.match(/replace\("([^"]+)"\)/);
-      if (!pathM || pathM[1] === "/404") return null;
+      const html2 = yield res1.text();
+      if (!html2)
+        return null;
+      var formUrl2 = extractFormAction(html2);
+      var formData2 = extractFormInputs(html2);
+      if (!formUrl2)
+        return null;
+      const res2 = yield fetch(formUrl2, {
+        method: "POST",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: toFormEncoded(formData2)
+      });
+      const resultHtml = yield res2.text();
+      if (!resultHtml)
+        return null;
+      var script = extractScriptContaining(resultHtml, "?go=");
+      var skTokenM = script.match(/\?go=([^"]+)/);
+      if (!skTokenM)
+        return null;
+      var skToken = skTokenM[1];
+      var wpHttp2 = formData2["_wp_http2"] || "";
+      const finalHtml = yield fetchText(host + "?go=" + skToken, {
+        "Cookie": skToken + "=" + wpHttp2
+      });
+      if (!finalHtml)
+        return null;
+      var driveUrl = extractMetaRefresh(finalHtml);
+      if (!driveUrl)
+        return null;
+      const drivePageHtml = yield fetchText(driveUrl);
+      var pathM = drivePageHtml.match(/replace\("([^"]+)"\)/);
+      if (!pathM || pathM[1] === "/404")
+        return null;
       return fixUrl(pathM[1], getBaseUrl(driveUrl));
-    });
-  }).catch(function(err) {
-    console.error("[UHDMovies] bypassHrefli error: " + err.message);
-    return null;
+    } catch (err) {
+      console.error("[UHDMovies] bypassHrefli error: " + err.message);
+      return null;
+    }
   });
 }
 function bypassHrefliSafe(url) {
-  return withTimeout(bypassHrefli(url), 6000).catch(function(err) {
-    console.error("[UHDMovies] bypassHrefli timeout: " + err.message);
-    return null;
-  });
-}
-
-function followRedirectForUrl(link) {
-  console.log("[UHDMovies] FollowRedirect: " + link);
-
-  var existingUrl = link.match(/[?&]url=(https?[^&\s]+)/);
-  if (existingUrl) {
-    var decoded = decodeURIComponent(existingUrl[1]);
-    console.log("[UHDMovies] Direct URL param: " + decoded.substring(0, 80));
-    return Promise.resolve(decoded);
-  }
-
-  return withTimeout(fetch(link, {
-    headers: { "User-Agent": USER_AGENT },
-    redirect: "follow"
-  }), 5000).then(function(res) {
-    var finalUrl = res.url || "";
-    console.log("[UHDMovies] Final URL (" + finalUrl.length + " chars): " + finalUrl.substring(0, 60) + "...");
-    var urlParam = finalUrl.match(/[?&]url=(https?[^&\s]+)/);
-    if (urlParam) {
-      return decodeURIComponent(urlParam[1]);
-    }
-    if (/googleusercontent\.com/.test(finalUrl)) return finalUrl;
-    if (/\.(mkv|mp4|m3u8)(\?|$)/i.test(finalUrl)) return finalUrl;
-    
-    return res.text().then(function(html) {
-      var metaUrl = html.match(/[?&]url=(https?:\/\/[^"&\s]+)/);
-      if (metaUrl) return decodeURIComponent(metaUrl[1]);
-     
-      var dlBtn = html.match(/<a[^>]*href="(https?:\/\/video-downloads\.googleusercontent\.com[^"]+)"/i)
-                || html.match(/<a[^>]*href="(https?:\/\/[^"]+\.googleusercontent\.com[^"]+)"/i)
-                || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.workers\.dev[^"]+)"/i)
-                || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.r2\.dev[^"]+)"/i);
-      if (dlBtn) return dlBtn[1];
-      
-      var videoSrc = html.match(/source[^>]*src="(https?:\/\/[^"]+)"/i)
-                   || html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i);
-      if (videoSrc) return videoSrc[1];
+  return __async(this, null, function* () {
+    try {
+      return yield withTimeout(bypassHrefli(url), 6e3);
+    } catch (err) {
+      console.error("[UHDMovies] bypassHrefli timeout: " + err.message);
       return null;
-    });
-  }).catch(function(err) {
-    console.error("[UHDMovies] FollowRedirect error: " + err.message);
-    return null;
+    }
   });
 }
-var CLOUDFLARE_PROXY = "https://nuvio-proxy-worker.yatinstudyies.workers.dev/?url=";
-
+function followRedirectForUrl(link) {
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] FollowRedirect: " + link);
+    var existingUrl = link.match(/[?&]url=(https?[^&\s]+)/);
+    if (existingUrl) {
+      var decoded = decodeURIComponent(existingUrl[1]);
+      console.log("[UHDMovies] Direct URL param: " + decoded.substring(0, 80));
+      return decoded;
+    }
+    try {
+      const res = yield withTimeout(fetch(link, {
+        headers: { "User-Agent": USER_AGENT },
+        redirect: "follow"
+      }), 5e3);
+      var finalUrl = res.url || "";
+      console.log("[UHDMovies] Final URL (" + finalUrl.length + " chars): " + finalUrl.substring(0, 60) + "...");
+      var urlParam = finalUrl.match(/[?&]url=(https?[^&\s]+)/);
+      if (urlParam) {
+        return decodeURIComponent(urlParam[1]);
+      }
+      if (/googleusercontent\.com/.test(finalUrl))
+        return finalUrl;
+      if (/\.(mkv|mp4|m3u8)(\?|$)/i.test(finalUrl))
+        return finalUrl;
+      const html = yield res.text();
+      var metaUrl = html.match(/[?&]url=(https?:\/\/[^"&\s]+)/);
+      if (metaUrl)
+        return decodeURIComponent(metaUrl[1]);
+      var dlBtn = html.match(/<a[^>]*href="(https?:\/\/video-downloads\.googleusercontent\.com[^"]+)"/i) || html.match(/<a[^>]*href="(https?:\/\/[^"]+\.googleusercontent\.com[^"]+)"/i) || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.workers\.dev[^"]+)"/i) || html.match(/<a[^>]*href="(https?:\/\/[^"]*\.r2\.dev[^"]+)"/i);
+      if (dlBtn)
+        return dlBtn[1];
+      var videoSrc = html.match(/source[^>]*src="(https?:\/\/[^"]+)"/i) || html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i);
+      if (videoSrc)
+        return videoSrc[1];
+      return null;
+    } catch (err) {
+      console.error("[UHDMovies] FollowRedirect error: " + err.message);
+      return null;
+    }
+  });
+}
 function wrapWithProxy(url) {
-  // If the scraper runs locally on the device, wrapping it in a CF proxy actually breaks
-  // IP-locked googleusercontent links because Cloudflare's IP doesn't match the generator's IP.
   return url;
 }
-
 function extractVideoSeed(finallink) {
-  return followRedirectForUrl(finallink).then(wrapWithProxy);
+  return __async(this, null, function* () {
+    const url = yield followRedirectForUrl(finallink);
+    return wrapWithProxy(url);
+  });
 }
 function extractInstantLink(finallink) {
-  return followRedirectForUrl(finallink).then(wrapWithProxy);
+  return __async(this, null, function* () {
+    const url = yield followRedirectForUrl(finallink);
+    return wrapWithProxy(url);
+  });
 }
 function extractResumeBot(url) {
-  console.log("[UHDMovies] ResumeBot: " + url);
-  return fetchText(url).then(function(html) {
-    var tokenM = html.match(/formData\.append\('token', '([a-f0-9]+)'\)/);
-    var pathM = html.match(/fetch\('\/download\?id=([a-zA-Z0-9\/+]+)'/);
-    if (!tokenM || !pathM) return null;
-    var token = tokenM[1];
-    var path = pathM[1];
-    var baseUrl = url.split("/download")[0];
-    return fetch(baseUrl + "/download?id=" + path, {
-      method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "*/*",
-        "Origin": baseUrl,
-        "Referer": url
-      },
-      body: "token=" + encodeURIComponent(token)
-    });
-  }).then(function(res) {
-    if (!res) return null;
-    return res.text();
-  }).then(function(text) {
-    if (!text) return null;
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] ResumeBot: " + url);
     try {
+      const html = yield fetchText(url);
+      var tokenM = html.match(/formData\.append\('token', '([a-f0-9]+)'\)/);
+      var pathM = html.match(/fetch\('\/download\?id=([a-zA-Z0-9\/+]+)'/);
+      if (!tokenM || !pathM)
+        return null;
+      var token = tokenM[1];
+      var path = pathM[1];
+      var baseUrl = url.split("/download")[0];
+      const res = yield fetch(baseUrl + "/download?id=" + path, {
+        method: "POST",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "*/*",
+          "Origin": baseUrl,
+          "Referer": url
+        },
+        body: "token=" + encodeURIComponent(token)
+      });
+      if (!res)
+        return null;
+      const text = yield res.text();
+      if (!text)
+        return null;
       var json = JSON.parse(text);
       return json.url && json.url.indexOf("http") === 0 ? json.url : null;
     } catch (e) {
+      console.error("[UHDMovies] ResumeBot error: " + e.message);
       return null;
     }
-  }).catch(function(err) {
-    console.error("[UHDMovies] ResumeBot error: " + err.message);
-    return null;
   });
 }
 function extractCFType1(url) {
-  console.log("[UHDMovies] CFType1: " + url);
-  return fetchText(url + "?type=1").then(function(html) {
-    return extractBtnSuccessLinks(html);
-  }).catch(function(err) {
-    console.error("[UHDMovies] CFType1 error: " + err.message);
-    return [];
-  });
-}
-function extractResumeCloudLink(baseUrl, path) {
-  console.log("[UHDMovies] ResumeCloud: " + baseUrl + path);
-  return fetchText(baseUrl + path).then(function(html) {
-    var links = extractBtnSuccessLinks(html);
-    return links.length ? links[0] : null;
-  }).catch(function(err) {
-    console.error("[UHDMovies] ResumeCloud error: " + err.message);
-    return null;
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] CFType1: " + url);
+    try {
+      const html = yield fetchText(url + "?type=1");
+      return extractBtnSuccessLinks(html);
+    } catch (err) {
+      console.error("[UHDMovies] CFType1 error: " + err.message);
+      return [];
+    }
   });
 }
 function extractDriveseedPage(url) {
-  console.log("[UHDMovies] Driveseed: " + url);
-  var streams = [];
-  return Promise.resolve().then(function() {
-    if (url.indexOf("r?key=") !== -1) {
-      return fetchText(url).then(function(html) {
-        var redirectM = html.match(/replace\("([^"]+)"\)/);
-        if (!redirectM) return html;
-        var base = getBaseUrl(url);
-        return fetchText(base + redirectM[1]);
-      });
-    }
-    return fetchText(url);
-  }).then(function(html) {
-    var baseDomain = getBaseUrl(url);
-    var qualityText = extractFirstListGroupItem(html);
-    var rawFileName = qualityText.replace("Name : ", "").trim();
-    var fileName = cleanTitle(rawFileName);
-    var size = extractThirdListItem(html).replace("Size : ", "").trim();
-    var quality = buildQualityLabel(qualityText);
-    var labelExtras = "";
-    if (fileName) labelExtras += "[" + fileName + "]";
-    if (size) labelExtras += "[" + size + "]";
-    var textCenterLinks = extractTextCenterLinks(html);
-    var promises = [];
-    textCenterLinks.forEach(function(item) {
-      var text = (item.text || "").toLowerCase();
-      var href = item.href;
-      if (!href) return;
-      if (text.indexOf("instant download") !== -1) {
-
-        promises.push(
-          extractInstantLink(href).then(function(link) {
-            if (link) streams.push({ name: "UHDMovies", title: "UHDMovies Instant " + quality + " " + labelExtras, url: link, quality: quality });
-          })
-        );
-      } else if (text.indexOf("resume worker bot") !== -1) {
-        promises.push(
-          extractResumeBot(href).then(function(link) {
-            if (link) streams.push({ name: "UHDMovies", title: "UHDMovies ResumeBot " + quality + " " + labelExtras, url: link, quality: quality });
-          })
-        );
-      } else if (text.indexOf("direct links") !== -1) {
-        promises.push(
-          extractCFType1(baseDomain + href).then(function(links) {
-            links.forEach(function(link) {
-              streams.push({ name: "UHDMovies", title: "UHDMovies Direct " + quality + " " + labelExtras, url: link, quality: quality });
-            });
-          })
-        );
-      } else if (text.indexOf("resume cloud") !== -1) {
-
-        console.log("[UHDMovies] Skipping Resume Cloud (requires CF token)");
-      } else if (text.indexOf("cloud download") !== -1) {
-        streams.push({ name: "UHDMovies", title: "UHDMovies Cloud " + quality + " " + labelExtras, url: href, quality: quality });
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] Driveseed: " + url);
+    var streams = [];
+    try {
+      var html = "";
+      if (url.indexOf("r?key=") !== -1) {
+        const phtml = yield fetchText(url);
+        var redirectM = phtml.match(/replace\("([^"]+)"\)/);
+        if (redirectM) {
+          var base = getBaseUrl(url);
+          html = yield fetchText(base + redirectM[1]);
+        } else {
+          html = phtml;
+        }
+      } else {
+        html = yield fetchText(url);
       }
-    });
-    return Promise.all(promises).then(function() {
+      var baseDomain = getBaseUrl(url);
+      var qualityText = extractFirstListGroupItem(html);
+      var rawFileName = qualityText.replace("Name : ", "").trim();
+      var fileName = cleanTitle(rawFileName);
+      var size = extractThirdListItem(html).replace("Size : ", "").trim();
+      var quality = buildQualityLabel(qualityText);
+      var labelExtras = "";
+      if (fileName)
+        labelExtras += "[" + fileName + "]";
+      if (size)
+        labelExtras += "[" + size + "]";
+      var textCenterLinks = extractTextCenterLinks(html);
+      var promises = [];
+      textCenterLinks.forEach(function(item) {
+        var text = (item.text || "").toLowerCase();
+        var href = item.href;
+        if (!href)
+          return;
+        if (text.indexOf("instant download") !== -1) {
+          promises.push(
+            extractInstantLink(href).then(function(link) {
+              if (link) {
+                let finalUrl = link;
+                if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+                  finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+                }
+                streams.push({ name: "UHDMovies", title: "UHDMovies Instant " + quality + " " + labelExtras, url: finalUrl, quality });
+              }
+            })
+          );
+        } else if (text.indexOf("resume worker bot") !== -1) {
+          promises.push(
+            extractResumeBot(href).then(function(link) {
+              if (link) {
+                let finalUrl = link;
+                if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+                  finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+                }
+                streams.push({ name: "UHDMovies", title: "UHDMovies ResumeBot " + quality + " " + labelExtras, url: finalUrl, quality });
+              }
+            })
+          );
+        } else if (text.indexOf("direct links") !== -1) {
+          promises.push(
+            extractCFType1(baseDomain + href).then(function(links) {
+              links.forEach(function(link) {
+                let finalUrl = link;
+                if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+                  finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+                }
+                streams.push({ name: "UHDMovies", title: "UHDMovies Direct " + quality + " " + labelExtras, url: finalUrl, quality });
+              });
+            })
+          );
+        } else if (text.indexOf("cloud download") !== -1) {
+          let finalUrl = href;
+          if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+            finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+          }
+          streams.push({ name: "UHDMovies", title: "UHDMovies Cloud " + quality + " " + labelExtras, url: finalUrl, quality });
+        }
+      });
+      yield Promise.all(promises);
       return streams;
-    });
-  }).catch(function(err) {
-    console.error("[UHDMovies] Driveseed error: " + err.message);
-    return [];
+    } catch (err) {
+      console.error("[UHDMovies] Driveseed error: " + err.message);
+      return [];
+    }
   });
 }
 function getMovieLinks(pageUrl) {
-  console.log("[UHDMovies] Movie links: " + pageUrl);
-  return fetchText(pageUrl).then(function(html) {
-    var links = [];
-    var entryM = html.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*)/i);
-    var entryHtml = entryM ? entryM[1] : html;
-    var parts = entryHtml.split(/<\/?p(?:\s[^>]*)?\s*>/i);
-    for (var i = 0; i < parts.length; i++) {
-      if (!/\[.*\]/.test(parts[i])) continue;
-      var sourceName = stripTags(parts[i]).split("Download")[0].trim();
-      for (var j = i + 1; j < Math.min(i + 6, parts.length); j++) {
-        var btnM = parts[j].match(/<a[^>]*class="[^"]*maxbutton-1[^"]*"[^>]*href="([^"]+)"/i) || parts[j].match(/<a[^>]*href="([^"]+)"[^>]*class="[^"]*maxbutton-1[^"]*"/i);
-        if (btnM) {
-          links.push({ sourceName, sourceLink: btnM[1] });
-          break;
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] Movie links: " + pageUrl);
+    try {
+      const html = yield fetchText(pageUrl);
+      var links = [];
+      var entryM = html.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*)/i);
+      var entryHtml = entryM ? entryM[1] : html;
+      var parts = entryHtml.split(/<\/?p(?:\s[^>]*)?\s*>/i);
+      for (var i = 0; i < parts.length; i++) {
+        if (!/\[.*\]/.test(parts[i]))
+          continue;
+        var sourceName = stripTags(parts[i]).split("Download")[0].trim();
+        for (var j = i + 1; j < Math.min(i + 6, parts.length); j++) {
+          var btnM = parts[j].match(/<a[^>]*class="[^"]*maxbutton-1[^"]*"[^>]*href="([^"]+)"/i) || parts[j].match(/<a[^>]*href="([^"]+)"[^>]*class="[^"]*maxbutton-1[^"]*"/i);
+          if (btnM) {
+            links.push({ sourceName, sourceLink: btnM[1] });
+            break;
+          }
         }
       }
+      console.log("[UHDMovies] Movie links found: " + links.length);
+      return links;
+    } catch (err) {
+      console.error("[UHDMovies] getMovieLinks error: " + err.message);
+      return [];
     }
-    console.log("[UHDMovies] Movie links found: " + links.length);
-    return links;
-  }).catch(function(err) {
-    console.error("[UHDMovies] getMovieLinks error: " + err.message);
-    return [];
   });
 }
 function getTvEpisodeLink(pageUrl, targetSeason, targetEpisode) {
-  console.log("[UHDMovies] TV S" + targetSeason + "E" + targetEpisode + ": " + pageUrl);
-  return fetchText(pageUrl).then(function(html) {
-    var links = [];
-    var blockRe = /<(p|div)(\s[^>]*)?>[\s\S]*?<\/\1>/gi;
-    var prevDetails = "";
-    var currentSeason = 1;
-    var m;
-    while ((m = blockRe.exec(html)) !== null) {
-      var blockHtml = m[0];
-      var blockText = stripTags(blockHtml);
-      var hasEpisodeLink = /episode/i.test(blockHtml) && /<a\b/i.test(blockHtml);
-      if (hasEpisodeLink) {
-        var seasonM = prevDetails.match(/(?:Season\s+|S0?)(\d+)/i);
-        if (seasonM) currentSeason = parseInt(seasonM[1]);
-        if (currentSeason === targetSeason) {
-          var episodeLinks = [];
-          var aRe = /<a\b[^>]*href="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi;
-          var aM;
-          while ((aM = aRe.exec(blockHtml)) !== null) {
-            if (/episode/i.test(aM[0])) episodeLinks.push(aM[1]);
+  return __async(this, null, function* () {
+    console.log("[UHDMovies] TV S" + targetSeason + "E" + targetEpisode + ": " + pageUrl);
+    try {
+      const html = yield fetchText(pageUrl);
+      var links = [];
+      var blockRe = /<(p|div)(\s[^>]*)?>[\s\S]*?<\/\1>/gi;
+      var prevDetails = "";
+      var currentSeason = 1;
+      var m;
+      while ((m = blockRe.exec(html)) !== null) {
+        var blockHtml = m[0];
+        var blockText = stripTags(blockHtml);
+        var hasEpisodeLink = /episode/i.test(blockHtml) && /<a\b/i.test(blockHtml);
+        if (hasEpisodeLink) {
+          var seasonM = prevDetails.match(/(?:Season\s+|S0?)(\d+)/i);
+          if (seasonM)
+            currentSeason = parseInt(seasonM[1]);
+          if (currentSeason === targetSeason) {
+            var episodeLinks = [];
+            var aRe = /<a\b[^>]*href="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi;
+            var aM;
+            while ((aM = aRe.exec(blockHtml)) !== null) {
+              if (/episode/i.test(aM[0]))
+                episodeLinks.push(aM[1]);
+            }
+            if (targetEpisode <= episodeLinks.length && targetEpisode >= 1) {
+              var link = episodeLinks[targetEpisode - 1];
+              var sizeM = prevDetails.match(/(\d+(?:\.\d+)?\s*(?:MB|GB))/i);
+              links.push({
+                sourceLink: link,
+                quality: buildQualityLabel(prevDetails),
+                size: sizeM ? sizeM[1] : null,
+                details: prevDetails
+              });
+            }
           }
-          if (targetEpisode <= episodeLinks.length && targetEpisode >= 1) {
-            var link = episodeLinks[targetEpisode - 1];
-            var sizeM = prevDetails.match(/(\d+(?:\.\d+)?\s*(?:MB|GB))/i);
-            links.push({
-              sourceLink: link,
-              quality: buildQualityLabel(prevDetails),
-              size: sizeM ? sizeM[1] : null,
-              details: prevDetails
-            });
-          }
+          currentSeason++;
         }
-        currentSeason++;
+        prevDetails = blockText;
       }
-      prevDetails = blockText;
+      console.log("[UHDMovies] Episode links found: " + links.length);
+      return links;
+    } catch (err) {
+      console.error("[UHDMovies] getTvEpisodeLink error: " + err.message);
+      return [];
     }
-    console.log("[UHDMovies] Episode links found: " + links.length);
-    return links;
-  }).catch(function(err) {
-    console.error("[UHDMovies] getTvEpisodeLink error: " + err.message);
-    return [];
   });
 }
 function getStreams(tmdbId, mediaType, season, episode) {
-  var startTime = Date.now();
-  console.log("[UHDMovies] getStreams " + mediaType + " " + (typeof tmdbId === 'object' ? tmdbId.title : tmdbId));
-  var allStreams = [];
-  var earlyStop = false;
-  var MAX_STREAMS = 8;
-  var tmdbPromise = typeof tmdbId === 'object' ? Promise.resolve(tmdbId) : getTmdbDetails(tmdbId, mediaType);
-  return tmdbPromise.then(function(tmdbDetails) {
-    if (!tmdbDetails) return [];
-    console.log("[UHDMovies] Title: " + tmdbDetails.title + " (" + tmdbDetails.year + ")");
-    return searchByTitle(tmdbDetails.title, tmdbDetails.year);
-  }).then(function(searchResults) {
-    if (!searchResults || searchResults.length === 0) {
-      console.log("[UHDMovies] No search results");
-      return [];
-    }
-    var isSeries = mediaType === "series" || mediaType === "tv";
-    // Only process top 2 search results for speed
-    var topResults = searchResults.slice(0, 2);
-    console.log("[UHDMovies] Processing top " + topResults.length + " of " + searchResults.length + " results");
-    var globalRequestIndex = 0;
-    var resultPromises = topResults.map(function(result) {
-      console.log("[UHDMovies] Processing: " + result.title);
-      var linksPromise = isSeries && season && episode ? getTvEpisodeLink(result.url, season, episode) : getMovieLinks(result.url);
-      return linksPromise.then(function(links) {
-        var promises = links.map(function(linkData) {
-          // 400ms stagger (was 50ms) — enough to avoid rate limiting bypass proxy
-          var delay = (globalRequestIndex++) * 400;
-          return new Promise(function(resolve) {
-            setTimeout(resolve, delay);
-          }).then(function() {
-            // Early termination: skip remaining if we already have enough streams
-            if (earlyStop) return [];
-            var sourceLink = linkData.sourceLink;
-            if (!sourceLink) return [];
-            var finalLinkPromise = sourceLink.indexOf("unblockedgames") !== -1 ? bypassHrefliSafe(sourceLink) : Promise.resolve(sourceLink);
-            return finalLinkPromise.then(function(finalLink) {
-              if (!finalLink || earlyStop) return [];
-              if (finalLink.indexOf("driveseed") !== -1 || finalLink.indexOf("driveleech") !== -1) {
-                return extractDriveseedPage(finalLink);
-              }
-              if (finalLink.indexOf("video-seed") !== -1) {
-                return extractVideoSeed(finalLink).then(function(url) {
-                  if (!url) return [];
-                  return [{ name: "UHDMovies", title: "UHDMovies " + (linkData.quality || "Unknown"), url: url, quality: linkData.quality || "Unknown" }];
-                });
-              }
-              return [{
-                name: "UHDMovies",
-                title: "UHDMovies " + (linkData.sourceName || linkData.quality || ""),
-                url: finalLink,
-                quality: linkData.quality || "Unknown"
-              }];
-            }).catch(function(err) {
-              console.error("[UHDMovies] finalLink processing error: " + err.message);
-              return [];
-            });
-          });
-        });
-        return Promise.all(promises).then(function(resultsArray) {
-          var combined = [];
-          resultsArray.forEach(function(arr) {
-            combined = combined.concat(arr);
-            // Check if we have enough streams for early termination of subsequent results
-            if (allStreams.length + combined.length >= MAX_STREAMS) earlyStop = true;
-          });
-          return combined;
-        });
-      }).catch(function(err) {
-        console.error("[UHDMovies] Process result error: " + err.message);
+  return __async(this, null, function* () {
+    var startTime = Date.now();
+    console.log("[UHDMovies] getStreams " + mediaType + " " + (typeof tmdbId === "object" ? tmdbId.title : tmdbId));
+    var allStreams = [];
+    var earlyStop = false;
+    var MAX_STREAMS = 8;
+    try {
+      let scoreStream = function(s) {
+        var q = s.quality || "";
+        var rScore = 0;
+        if (/^4K/i.test(q))
+          rScore = 4;
+        else if (/1080p/i.test(q))
+          rScore = 3;
+        else if (/720p/i.test(q))
+          rScore = 2;
+        else if (/480p/i.test(q))
+          rScore = 1;
+        var sScore = 0;
+        if (/remux/i.test(q))
+          sScore = 5;
+        else if (/blu.?ray/i.test(q))
+          sScore = 4;
+        else if (/web.?dl/i.test(q))
+          sScore = 3;
+        else if (/webrip/i.test(q))
+          sScore = 2;
+        else if (/hdrip|dvdrip|hdtv/i.test(q))
+          sScore = 1;
+        return rScore * 10 + sScore;
+      };
+      if (!tmdbId)
         return [];
+      var tmdbDetails = typeof tmdbId === "object" ? tmdbId : yield getTmdbDetails(tmdbId, mediaType);
+      if (!tmdbDetails || !tmdbDetails.title) {
+        console.log("[UHDMovies] No TMDB details found");
+        return [];
+      }
+      console.log("[UHDMovies] Title: " + tmdbDetails.title + " (" + tmdbDetails.year + ")");
+      var searchResults = yield searchByTitle(tmdbDetails.title, tmdbDetails.year);
+      if (!searchResults || searchResults.length === 0) {
+        console.log("[UHDMovies] No search results");
+        return [];
+      }
+      var isSeries = mediaType === "series" || mediaType === "tv";
+      var topResults = searchResults.slice(0, 2);
+      console.log("[UHDMovies] Processing top " + topResults.length + " of " + searchResults.length + " results");
+      var globalRequestIndex = 0;
+      var resultPromises = topResults.map(function(result) {
+        return __async(this, null, function* () {
+          console.log("[UHDMovies] Processing: " + result.title);
+          try {
+            var links = isSeries && season && episode ? yield getTvEpisodeLink(result.url, season, episode) : yield getMovieLinks(result.url);
+            var promises = links.map(function(linkData) {
+              return __async(this, null, function* () {
+                var delay = globalRequestIndex++ * 400;
+                yield new Promise(function(resolve) {
+                  setTimeout(resolve, delay);
+                });
+                if (earlyStop)
+                  return [];
+                var sourceLink = linkData.sourceLink;
+                if (!sourceLink)
+                  return [];
+                try {
+                  var finalLink = sourceLink.indexOf("unblockedgames") !== -1 ? yield bypassHrefliSafe(sourceLink) : sourceLink;
+                  if (!finalLink || earlyStop)
+                    return [];
+                  var extracted = [];
+                  if (finalLink.indexOf("driveseed") !== -1 || finalLink.indexOf("driveleech") !== -1) {
+                    extracted = yield extractDriveseedPage(finalLink);
+                  } else if (finalLink.indexOf("video-seed") !== -1) {
+                    const url = yield extractVideoSeed(finalLink);
+                    if (url) {
+                      let finalUrl = url;
+                      if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+                        finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+                      }
+                      extracted = [{ name: "UHDMovies", title: "UHDMovies " + (linkData.quality || "Unknown"), url: finalUrl, quality: linkData.quality || "Unknown" }];
+                    }
+                  } else {
+                    let finalUrl = finalLink;
+                    if (!/\.(m3u8|mp4|mkv)/i.test(finalUrl)) {
+                      finalUrl += finalUrl.includes("#") ? "" : "#.mkv";
+                    }
+                    extracted = [{
+                      name: "UHDMovies",
+                      title: "UHDMovies " + (linkData.sourceName || linkData.quality || ""),
+                      url: finalUrl,
+                      quality: linkData.quality || "Unknown"
+                    }];
+                  }
+                  extracted.forEach(function(s) {
+                    if (s.url && !/\.(m3u8|mp4|mkv)/i.test(s.url)) {
+                      s.url += s.url.includes("#") ? "" : "#.mkv";
+                    }
+                  });
+                  return extracted;
+                } catch (err) {
+                  console.error("[UHDMovies] finalLink processing error: " + err.message);
+                  return [];
+                }
+              });
+            });
+            var resultsArray = yield Promise.all(promises);
+            var combined = [];
+            resultsArray.forEach(function(arr) {
+              combined = combined.concat(arr);
+              if (allStreams.length + combined.length >= MAX_STREAMS)
+                earlyStop = true;
+            });
+            return combined;
+          } catch (err) {
+            console.error("[UHDMovies] Process result error: " + err.message);
+            return [];
+          }
+        });
       });
-    });
-    return Promise.all(resultPromises).then(function(allResults) {
+      var allResults = yield Promise.all(resultPromises);
       allResults.forEach(function(streams) {
         allStreams = allStreams.concat(streams);
       });
-      function scoreStream(s) {
-        var q = s.quality || "";
-        var rScore = 0;
-        if (/^4K/i.test(q))    rScore = 4;
-        else if (/1080p/i.test(q)) rScore = 3;
-        else if (/720p/i.test(q))  rScore = 2;
-        else if (/480p/i.test(q))  rScore = 1;
-        var sScore = 0;
-        if (/remux/i.test(q))       sScore = 5;
-        else if (/blu.?ray/i.test(q)) sScore = 4;
-        else if (/web.?dl/i.test(q))  sScore = 3;
-        else if (/webrip/i.test(q))   sScore = 2;
-        else if (/hdrip|dvdrip|hdtv/i.test(q)) sScore = 1;
-        return rScore * 10 + sScore;
-      }
-      allStreams.sort(function(a, b) { return scoreStream(b) - scoreStream(a); });
+      allStreams.sort(function(a, b) {
+        return scoreStream(b) - scoreStream(a);
+      });
       var elapsed = Date.now() - startTime;
       console.log("[UHDMovies] Done: " + allStreams.length + " streams in " + elapsed + "ms");
       return allStreams;
-    });
-  }).catch(function(err) {
-    console.error("[UHDMovies] Error: " + err.message);
-    return [];
+    } catch (err) {
+      console.error("[UHDMovies] Error: " + err.message);
+      return [];
+    }
   });
 }
 if (typeof module !== "undefined" && module.exports) {
