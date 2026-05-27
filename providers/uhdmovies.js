@@ -598,8 +598,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
       var linksPromise = isSeries && season && episode ? getTvEpisodeLink(result.url, season, episode) : getMovieLinks(result.url);
       return linksPromise.then(function(links) {
         var promises = links.map(function(linkData) {
-          // 50ms stagger (was 600ms) — just enough to avoid rate limiting
-          var delay = (globalRequestIndex++) * 50;
+          // 400ms stagger (was 50ms) — enough to avoid rate limiting bypass proxy
+          var delay = (globalRequestIndex++) * 400;
           return new Promise(function(resolve) {
             setTimeout(resolve, delay);
           }).then(function() {
